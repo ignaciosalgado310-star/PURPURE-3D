@@ -10,7 +10,6 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.ItemStack;
@@ -21,61 +20,98 @@ import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.network.PacketDistributor;
-import java.util.*;
 
-@Mod.EventBusSubscriber(modid=PurpureMod.MODID, bus=Mod.EventBusSubscriber.Bus.FORGE)
+import java.util.ArrayDeque;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.Random;
+import java.util.UUID;
+
+@Mod.EventBusSubscriber(modid = PurpureMod.MODID, bus = Mod.EventBusSubscriber.Bus.FORGE)
 public final class PurpureServerEvents {
-    private static final Map<UUID,Ritual> ACTIVE=new HashMap<>();
-    private static final int IMPACT=260;
-    private static final int INTERVAL=3;
-    private static final int FINAL_LINGER=140;
+    private static final Map<UUID, Ritual> ACTIVE = new HashMap<>();
+    private static final int IMPACT = 410;
+    private static final int INTERVAL = 2;
+
     private PurpureServerEvents() {}
 
     @SubscribeEvent
-    public static void commands(RegisterCommandsEvent e) {
-        e.getDispatcher().register(Commands.literal("purpure").requires(s->s.hasPermission(2))
-                .then(Commands.argument("target",EntityArgument.player())
-                        .executes(c->start(EntityArgument.getPlayer(c,"target"),25))
-                        .then(Commands.argument("hits",IntegerArgumentType.integer(1,300))
-                                .executes(c->start(EntityArgument.getPlayer(c,"target"),IntegerArgumentType.getInteger(c,"hits"))))));
+    public static void commands(RegisterCommandsEvent event) {
+        event.getDispatcher().register(
+                Commands.literal("purpure")
+                        .requires(source -> source.hasPermission(2))
+                        .then(Commands.argument("target", EntityArgument.player())
+                                .executes(context -> start(EntityArgument.getPlayer(context, "target"), 25))
+                                .then(Commands.argument("hits", IntegerArgumentType.integer(1, 300))
+                                        .executes(context -> start(
+                                                EntityArgument.getPlayer(context, "target"),
+                                                IntegerArgumentType.getInteger(context, "hits")
+                                        ))))
+        );
     }
 
-    private static int start(ServerPlayer p,int hits) {
-        Ritual r=ACTIVE.get(p.getUUID());
-        if(r!=null){
-            r.hits=Math.min(2000,r.hits+hits);
-            send(r,PurpureEffectPacket.EXTEND,hits);
+    private static int start(ServerPlayer player, int hits) {
+        Ritual existing = ACTIVE.get(player.getUUID());
+        if (existing != null) {
+            existing.hits = Math.min(2000, existing.hits + hits);
+            send(existing, PurpureEffectPacket.EXTEND, hits);
+            player.sendSystemMessage(Component.literal("§5§lHOLLOW PURPLE §7• §d+" + hits + " golpes"));
             return 1;
         }
-        r=new Ritual(p,hits);
-        ACTIVE.put(p.getUUID(),r);
-        send(r,PurpureEffectPacket.START,hits);
-        r.level.playSound(null,p.blockPosition(),SoundEvents.BEACON_ACTIVATE,SoundSource.MASTER,3.0f,0.50f);
-        p.sendSystemMessage(Component.literal("§5§lHOLLOW PURPLE §7• §dRitual 3D iniciado"));
+
+        Ritual ritual = new Ritual(player, hits);
+        ACTIVE.put(player.getUUID(), ritual);
+        send(ritual, PurpureEffectPacket.START, hits);
+
+        ritual.level.playSound(
+                null,
+                player.blockPosition(),
+                PurpureMod.HOLLOW_PURPLE_VIDEO.get(),
+                SoundSource.MASTER,
+                4.0f,
+                1.0f
+        );
+
+        player.sendSystemMessage(Component.literal("§5§lHOLLOW PURPLE §7• §dRitual iniciado"));
         return 1;
     }
 
-    private static void send(Ritual r,byte mode,int hits){
-        ModNetwork.CHANNEL.send(PacketDistributor.DIMENSION.with(() -> r.level.dimension()),
-                new PurpureEffectPacket(mode,r.id,r.level.dimension().location().toString(),r.x,r.y,r.z,hits,r.seed));
+    private static void send(Ritual ritual, byte mode, int hits) {
+        ModNetwork.CHANNEL.send(
+                PacketDistributor.DIMENSION.with(() -> ritual.level.dimension()),
+                new PurpureEffectPacket(
+                        mode,
+                        ritual.id,
+                        ritual.level.dimension().location().toString(),
+                        ritual.x,
+                        ritual.y,
+                        ritual.z,
+                        hits,
+                        ritual.seed
+                )
+        );
     }
 
     @SubscribeEvent
-    public static void tick(TickEvent.ServerTickEvent e){
-        if(e.phase!=TickEvent.Phase.END||ACTIVE.isEmpty())return;
-        Iterator<Ritual> it=ACTIVE.values().iterator();
-        while(it.hasNext()){
-            Ritual r=it.next();
-            ServerPlayer p=r.level.getServer().getPlayerList().getPlayer(r.id);
-            if(p==null||!p.isAlive()||p.serverLevel()!=r.level){
-                send(r,PurpureEffectPacket.STOP,0);
-                it.remove();
+    public static void tick(TickEvent.ServerTickEvent event) {
+        if (event.phase != TickEvent.Phase.END || ACTIVE.isEmpty()) return;
+
+        Iterator<Ritual> iterator = ACTIVE.values().iterator();
+        while (iterator.hasNext()) {
+            Ritual ritual = iterator.next();
+            ServerPlayer player = ritual.level.getServer().getPlayerList().getPlayer(ritual.id);
+
+            if (player == null || !player.isAlive() || player.serverLevel() != ritual.level) {
+                send(ritual, PurpureEffectPacket.STOP, 0);
+                iterator.remove();
                 continue;
             }
-            r.tick(p);
-            if(r.done()){
-                send(r,PurpureEffectPacket.STOP,0);
-                it.remove();
+
+            ritual.tick(player);
+            if (ritual.done()) {
+                send(ritual, PurpureEffectPacket.STOP, 0);
+                iterator.remove();
             }
         }
     }
@@ -83,72 +119,107 @@ public final class PurpureServerEvents {
     private static final class Ritual {
         final UUID id;
         final ServerLevel level;
-        final double x,y,z;
-        final long seed=new Random().nextLong();
-        final ArrayDeque<BlockPos> crater=new ArrayDeque<>();
-        int t=0,hits,done=0;
+        final double x;
+        final double y;
+        final double z;
+        final long seed = new Random().nextLong();
+        final ArrayDeque<BlockPos> crater = new ArrayDeque<>();
 
-        Ritual(ServerPlayer p,int hits){
-            id=p.getUUID();level=p.serverLevel();x=p.getX();y=p.getY();z=p.getZ();this.hits=hits;
+        int t;
+        int hits;
+        int completedHits;
+
+        Ritual(ServerPlayer player, int hits) {
+            this.id = player.getUUID();
+            this.level = player.serverLevel();
+            this.x = player.getX();
+            this.y = player.getY();
+            this.z = player.getZ();
+            this.hits = hits;
         }
 
-        int end(){return IMPACT+hits*INTERVAL+FINAL_LINGER;}
+        int end() {
+            return Math.max(540, IMPACT + hits * INTERVAL + 80);
+        }
 
-        void tick(ServerPlayer p){
+        void tick(ServerPlayer player) {
             t++;
-            if(t<end()){
-                p.teleportTo(level,x,y,z,p.getYRot(),p.getXRot());
-                p.setDeltaMovement(0,0,0);
-                p.fallDistance=0;
+
+            if (t < end()) {
+                player.teleportTo(level, x, y, z, player.getYRot(), player.getXRot());
+                player.setDeltaMovement(0.0, 0.0, 0.0);
+                player.fallDistance = 0.0f;
+                player.hurtMarked = true;
             }
 
-            if(t==90) level.playSound(null,p.blockPosition(),SoundEvents.RESPAWN_ANCHOR_CHARGE,SoundSource.MASTER,3.5f,0.55f);
-            if(t==175) level.playSound(null,p.blockPosition(),SoundEvents.END_PORTAL_SPAWN,SoundSource.MASTER,4.0f,1.30f);
-            if(t==235) level.playSound(null,p.blockPosition(),SoundEvents.BEACON_POWER_SELECT,SoundSource.MASTER,4.0f,0.45f);
-
-            if(t==IMPACT){
-                level.playSound(null,p.blockPosition(),SoundEvents.GENERIC_EXPLODE,SoundSource.MASTER,6.0f,0.38f);
-                queue(p.blockPosition());
+            if (t == IMPACT) {
+                queueCrater(player.blockPosition());
             }
 
-            if(t>=IMPACT&&done<hits){
-                int due=Math.min(hits,((t-IMPACT)/INTERVAL)+1);
-                while(done<due){hit(p);done++;}
+            if (t >= IMPACT && completedHits < hits) {
+                int due = Math.min(hits, ((t - IMPACT) / INTERVAL) + 1);
+                while (completedHits < due) {
+                    hit(player);
+                    completedHits++;
+                }
             }
 
-            for(int i=0;i<120&&!crater.isEmpty();i++){
-                BlockPos b=crater.poll();
-                if(!level.getBlockState(b).isAir()&&!level.getBlockState(b).is(Blocks.BEDROCK)&&level.getBlockEntity(b)==null)
-                    level.destroyBlock(b,false);
+            for (int i = 0; i < 120 && !crater.isEmpty(); i++) {
+                BlockPos pos = crater.poll();
+                if (!level.getBlockState(pos).isAir()
+                        && !level.getBlockState(pos).is(Blocks.BEDROCK)
+                        && level.getBlockEntity(pos) == null) {
+                    level.destroyBlock(pos, false);
+                }
             }
         }
 
-        void hit(ServerPlayer p){
-            if(totem(p))level.broadcastEntityEvent(p,(byte)35);
-            else p.hurt(p.damageSources().magic(),1000f);
+        void hit(ServerPlayer player) {
+            if (consumeTotem(player)) {
+                level.broadcastEntityEvent(player, (byte) 35);
+            } else {
+                player.hurt(player.damageSources().magic(), 1000.0f);
+            }
         }
 
-        boolean totem(ServerPlayer p){
-            ItemStack o=p.getOffhandItem();
-            if(o.is(Items.TOTEM_OF_UNDYING)){o.shrink(1);return true;}
-            Inventory inv=p.getInventory();
-            for(int i=0;i<inv.getContainerSize();i++){
-                ItemStack s=inv.getItem(i);
-                if(s.is(Items.TOTEM_OF_UNDYING)){s.shrink(1);return true;}
+        boolean consumeTotem(ServerPlayer player) {
+            ItemStack offhand = player.getOffhandItem();
+            if (offhand.is(Items.TOTEM_OF_UNDYING)) {
+                offhand.shrink(1);
+                return true;
+            }
+
+            Inventory inventory = player.getInventory();
+            for (int i = 0; i < inventory.getContainerSize(); i++) {
+                ItemStack stack = inventory.getItem(i);
+                if (stack.is(Items.TOTEM_OF_UNDYING)) {
+                    stack.shrink(1);
+                    return true;
+                }
             }
             return false;
         }
 
-        void queue(BlockPos c){
-            int RX=10,RY=6;
-            for(int dx=-RX;dx<=RX;dx++)
-                for(int dy=-RY;dy<=RY;dy++)
-                    for(int dz=-RX;dz<=RX;dz++){
-                        double q=(dx*dx)/(double)(RX*RX)+(dy*dy)/(double)(RY*RY)+(dz*dz)/(double)(RX*RX);
-                        if(q<=1)crater.add(c.offset(dx,dy,dz));
+        void queueCrater(BlockPos center) {
+            int radiusX = 10;
+            int radiusY = 5;
+            int radiusZ = 10;
+
+            for (int dx = -radiusX; dx <= radiusX; dx++) {
+                for (int dy = -radiusY; dy <= radiusY; dy++) {
+                    for (int dz = -radiusZ; dz <= radiusZ; dz++) {
+                        double normalized =
+                                (dx * dx) / 100.0 +
+                                (dy * dy) / 25.0 +
+                                (dz * dz) / 100.0;
+                        if (normalized <= 1.0) crater.add(center.offset(dx, dy, dz));
                     }
+                }
+            }
         }
 
-        boolean done(){return t>end()&&crater.isEmpty();}
+        boolean done() {
+            return t > end() && crater.isEmpty();
+        }
     }
 }
