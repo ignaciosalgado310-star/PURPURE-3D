@@ -1,0 +1,11 @@
+{
+  "hollow_purple_video": {
+    "subtitle": "subtitles.purpure.hollow_purple",
+    "sounds": [
+      {
+        "name": "purpure:hollow_purple_video",
+        "stream": true
+      }
+    ]
+  }
+}
