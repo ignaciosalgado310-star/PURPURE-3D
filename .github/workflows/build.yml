@@ -23,10 +23,8 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.1.1'
-      - name: Prepare Hollow Purple video audio
-        run: |
-          base64 -d src/main/resources/assets/purpure/sounds/hollow_purple_video.b64 > src/main/resources/assets/purpure/sounds/hollow_purple_video.ogg
-          rm -f src/main/resources/assets/purpure/sounds/hollow_purple_video.b64
+      - name: Prepare resources
+        run: rm -f src/main/resources/assets/purpure/sounds/hollow_purple_video.b64
       - name: Build Forge mod
         run: gradle clean build --stacktrace
       - name: Upload JAR
