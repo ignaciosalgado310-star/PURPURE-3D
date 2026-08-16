@@ -23,6 +23,11 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.1.1'
+      - name: Prepare V3 source
+        run: |
+          sed -i 's/drawSphereMesh(pose, radius, red, green, blue, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f, false);/drawSphereMesh(pose, radius, red, green, blue, 1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f, false);/' src/main/java/igy/purpure/client/ClientPurpureEffects.java
+          sed -i 's/drawSphereMesh(pose, radius, red, green, blue, alpha, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f, false);/drawSphereMesh(pose, radius, red, green, blue, alpha, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f, false);/' src/main/java/igy/purpure/client/ClientPurpureEffects.java
+          rm -f src/main/resources/assets/purpure/sounds/hollow_purple_video.b64
       - name: Build Forge mod
         run: gradle clean build --stacktrace
       - name: Upload JAR
