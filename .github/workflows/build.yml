@@ -23,8 +23,30 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.1.1'
-      - name: Prepare resources
-        run: rm -f src/main/resources/assets/purpure/sounds/hollow_purple_video.b64
+      - name: Prepare V7 Gojo Caster
+        run: |
+          rm -f src/main/resources/assets/purpure/sounds/hollow_purple_video.b64
+          rm -f src/main/java/igy/purpure/client/ClientCasterAnimation.java
+          rm -f src/main/java/igy/purpure/client/ClientEnergyEnhancements.java
+          python3 - <<'PY'
+          from pathlib import Path
+
+          effects = Path('src/main/java/igy/purpure/client/ClientPurpureEffects.java')
+          text = effects.read_text()
+          old = 'if (event.getStage() != RenderLevelStageEvent.Stage.AFTER_PARTICLES || ACTIVE.isEmpty()) return;'
+          if old not in text:
+              raise SystemExit('Could not find V6 render guard')
+          text = text.replace(old, 'if (true) return;', 1)
+          effects.write_text(text)
+
+          camera = Path('src/main/java/igy/purpure/client/ClientCinematicDirector.java')
+          text = camera.read_text()
+          old = 'mc.options.setCameraType(CameraType.THIRD_PERSON_BACK);'
+          new = 'mc.options.setCameraType(t < 105.0f ? CameraType.THIRD_PERSON_FRONT : CameraType.THIRD_PERSON_BACK);'
+          if old not in text:
+              raise SystemExit('Could not find V6 camera assignment')
+          camera.write_text(text.replace(old, new, 1))
+          PY
       - name: Build Forge mod
         run: gradle clean build --stacktrace
       - name: Upload JAR
