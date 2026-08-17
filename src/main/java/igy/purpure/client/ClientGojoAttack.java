@@ -20,15 +20,26 @@ import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import org.joml.Matrix4f;
 
+/**
+ * V8: Azul y Rojo se acercan lentamente y SOLO crean morado cuando ya se tocan.
+ * Sin nucleo blanco y sin columna/rayo vertical al final.
+ */
 @Mod.EventBusSubscriber(modid = PurpureMod.MODID, value = Dist.CLIENT, bus = Mod.EventBusSubscriber.Bus.FORGE)
 public final class ClientGojoAttack {
     private static final float TAU = (float)(Math.PI * 2.0);
+
+    // Gojo/NPC esta a +4 bloques del objetivo.
+    private static final float GOJO_X = 4.0f;
+    private static final float GOJO_Y = 0.0f;
+    private static final float FUSION_X = 2.60f;
+    private static final float FUSION_Y = 2.08f;
 
     private ClientGojoAttack() {}
 
     @SubscribeEvent
     public static void render(RenderLevelStageEvent event) {
         if (event.getStage() != RenderLevelStageEvent.Stage.AFTER_PARTICLES) return;
+
         Minecraft mc = Minecraft.getInstance();
         if (mc.level == null) return;
 
@@ -36,19 +47,18 @@ public final class ClientGojoAttack {
         PoseStack pose = event.getPoseStack();
         float partial = event.getPartialTick();
 
-        for (AbstractClientPlayer player : mc.level.players()) {
-            float base = ClientPurpureEffects.effectTick(player.getUUID());
+        for (AbstractClientPlayer target : mc.level.players()) {
+            float base = ClientPurpureEffects.effectTick(target.getUUID());
             if (base < 0.0f) continue;
             float t = base + partial;
 
             pose.pushPose();
             pose.translate(
-                    player.getX() - camera.getPosition().x,
-                    player.getY() - camera.getPosition().y,
-                    player.getZ() - camera.getPosition().z
+                    target.getX() - camera.getPosition().x,
+                    target.getY() - camera.getPosition().y,
+                    target.getZ() - camera.getPosition().z
             );
 
-            ClientGojoCaster.render(pose, t);
             drawAttack(pose, t);
             pose.popPose();
         }
@@ -60,138 +70,149 @@ public final class ClientGojoAttack {
     }
 
     private static void drawAttack(PoseStack pose, float t) {
-        if (t < 145.0f) {
-            float appear = smooth(5.0f, 24.0f, t);
-            float converge = smooth(58.0f, 124.0f, t);
-            float fusion = smooth(78.0f, 132.0f, t);
-            float vanish = 1.0f - smooth(126.0f, 145.0f, t);
+        // ------------------------------------------------------------
+        // 1) AZUL + ROJO: aparecen, orbitan y se acercan MUY poco a poco.
+        // ------------------------------------------------------------
+        if (t < 260.0f) {
+            float appear = smooth(16.0f, 48.0f, t);
+            float converge = smooth(82.0f, 238.0f, t);
 
-            float cx = Mth.lerp(converge, ClientGojoCaster.X, ClientGojoCaster.FUSION_X);
-            float cy = Mth.lerp(converge, 1.95f, ClientGojoCaster.FUSION_Y);
-            float orbit = Mth.lerp(converge, 2.35f, 0.0f);
-            float boost = 1.0f + smooth(88.0f, 120.0f, t) * 0.78f;
-            float angle = t * 0.086f * boost;
-            float size = Mth.lerp(appear, 0.22f, 1.18f) * Mth.lerp(converge, 1.0f, 0.76f) * vanish;
+            // El violeta NO empieza hasta que practicamente ya se tocaron.
+            float fusionColor = smooth(218.0f, 250.0f, t);
+            float vanish = 1.0f - smooth(244.0f, 260.0f, t);
 
-            Orb blue = orb(cx, cy, orbit, angle, size, true, fusion, t, converge);
-            Orb red = orb(cx, cy, orbit, angle + Mth.PI, size, false, fusion, t, converge);
+            float centerX = Mth.lerp(converge, GOJO_X, FUSION_X);
+            float centerY = Mth.lerp(converge, 2.05f, FUSION_Y);
+            float orbit = Mth.lerp(converge, 2.55f, 0.0f);
+
+            // Giro tranquilo al principio y un poco mas rapido al final.
+            float attractionBoost = 1.0f + smooth(190.0f, 235.0f, t) * 0.48f;
+            float angle = t * 0.055f * attractionBoost;
+
+            float size = Mth.lerp(appear, 0.28f, 1.10f);
+            size *= Mth.lerp(converge, 1.0f, 0.80f) * vanish;
+
+            Orb blue = orb(centerX, centerY, orbit, angle, size, true, fusionColor, t, converge);
+            Orb red = orb(centerX, centerY, orbit, angle + Mth.PI, size, false, fusionColor, t, converge);
 
             drawOrb(pose, blue);
             drawOrb(pose, red);
             drawTrail(pose, t, true);
             drawTrail(pose, t, false);
 
-            if (t >= 78.0f) {
-                float q = smooth(78.0f, 128.0f, t) * vanish;
+            // Filamentos morados SOLO en el contacto final.
+            if (t >= 222.0f) {
+                float q = smooth(222.0f, 250.0f, t) * vanish;
                 drawFusionWeb(pose, blue, red, t, q);
-
-                pose.pushPose();
-                pose.translate(ClientGojoCaster.FUSION_X, ClientGojoCaster.FUSION_Y, 0.0f);
-                float r = Mth.lerp(q, 0.08f, 0.88f);
-                solidSphere(pose, r, 0.57f, 0.055f, 0.98f);
-                glowSphere(pose, r * 1.12f, 0.88f, 0.18f, 1.0f, 0.20f * q);
-                pose.popPose();
             }
         }
 
-        if (t >= 102.0f) {
-            float born = smooth(102.0f, 136.0f, t);
-            float grow = smooth(132.0f, 176.0f, t);
-            float launch = smooth(148.0f, 190.0f, t);
-            float fade = 1.0f - smooth(330.0f, 365.0f, t);
+        // ------------------------------------------------------------
+        // 2) PURPLE: nace DESPUES del contacto, pequeno -> pulso -> crece.
+        // ------------------------------------------------------------
+        if (t >= 242.0f) {
+            float born = smooth(242.0f, 260.0f, t);
+            float grow = smooth(258.0f, 318.0f, t);
+            float launch = smooth(304.0f, 340.0f, t);
+            float fade = 1.0f - smooth(372.0f, 402.0f, t);
 
-            float small = Mth.lerp(born, 0.10f, 1.80f);
-            float radius = Mth.lerp(grow, small, 6.95f) * fade;
-            if (t >= 132.0f && t <= 158.0f) {
-                radius *= 1.0f + Mth.sin((t - 132.0f) * 0.42f) * 0.055f * (1.0f - smooth(148.0f, 160.0f, t));
+            float small = Mth.lerp(born, 0.08f, 0.78f);
+            float radius = Mth.lerp(grow, small, 4.15f) * fade;
+
+            // Pulso uniforme, siempre esferico.
+            if (t >= 258.0f && t <= 286.0f) {
+                float pulseFade = 1.0f - smooth(274.0f, 288.0f, t);
+                radius *= 1.0f + Mth.sin((t - 258.0f) * 0.43f) * 0.045f * pulseFade;
             }
 
-            float px = Mth.lerp(launch, ClientGojoCaster.FUSION_X, 0.0f);
-            float py = Mth.lerp(launch, ClientGojoCaster.FUSION_Y, 1.55f);
-
-            // Cinta de lanzamiento desde Gojo hasta el Purple.
-            if (t >= 145.0f && t <= 198.0f) {
-                float q = smooth(145.0f, 160.0f, t) * (1.0f - smooth(190.0f, 202.0f, t));
-                ribbon(pose,
-                        ClientGojoCaster.X - 0.42f, 1.56f, 0.0f,
-                        px, py, 0.0f,
-                        0.68f, 0.12f, 1.0f, 0.13f * q, 0.10f + q * 0.18f);
-            }
+            float px = Mth.lerp(launch, FUSION_X, 0.0f);
+            float py = Mth.lerp(launch, FUSION_Y, 1.58f);
 
             pose.pushPose();
             pose.translate(px, py, 0.0f);
-            pose.mulPose(Axis.YP.rotationDegrees(t * 0.31f));
+            pose.mulPose(Axis.YP.rotationDegrees(t * 0.22f));
             purple(pose, radius);
-            drawPurpleSpirals(pose, radius, t, fade);
             pose.popPose();
         }
     }
 
-    private static Orb orb(float cx, float cy, float orbit, float angle, float size,
-                           boolean blue, float fusion, float t, float converge) {
-        float x = cx + Mth.cos(angle) * orbit;
+    private static Orb orb(float centerX, float centerY, float orbit, float angle, float size,
+                           boolean blue, float fusionColor, float t, float converge) {
+        float x = centerX + Mth.cos(angle) * orbit;
         float z = Mth.sin(angle) * orbit;
-        float y = cy + (blue ? Mth.sin(t * 0.090f) : Mth.cos(t * 0.087f + 1.2f)) * 0.22f * (1.0f - converge);
+        float bob = (1.0f - converge) * 0.18f;
+        float y = centerY + (blue ? Mth.sin(t * 0.070f) : Mth.cos(t * 0.068f + 1.15f)) * bob;
 
-        float r = blue ? Mth.lerp(fusion, 0.025f, 0.52f) : Mth.lerp(fusion, 1.00f, 0.52f);
-        float g = blue ? Mth.lerp(fusion, 0.30f, 0.07f) : Mth.lerp(fusion, 0.025f, 0.07f);
-        float b = blue ? Mth.lerp(fusion, 1.00f, 0.96f) : Mth.lerp(fusion, 0.070f, 0.96f);
+        float r = blue ? Mth.lerp(fusionColor, 0.025f, 0.53f) : Mth.lerp(fusionColor, 1.00f, 0.53f);
+        float g = blue ? Mth.lerp(fusionColor, 0.27f, 0.055f) : Mth.lerp(fusionColor, 0.018f, 0.055f);
+        float b = blue ? Mth.lerp(fusionColor, 1.00f, 0.98f) : Mth.lerp(fusionColor, 0.055f, 0.98f);
         return new Orb(x, y, z, size, r, g, b);
     }
 
     private static Orb orbAt(float t, boolean blue) {
-        float appear = smooth(5.0f, 24.0f, t);
-        float converge = smooth(58.0f, 124.0f, t);
-        float fusion = smooth(78.0f, 132.0f, t);
-        float vanish = 1.0f - smooth(126.0f, 145.0f, t);
-        float cx = Mth.lerp(converge, ClientGojoCaster.X, ClientGojoCaster.FUSION_X);
-        float cy = Mth.lerp(converge, 1.95f, ClientGojoCaster.FUSION_Y);
-        float orbit = Mth.lerp(converge, 2.35f, 0.0f);
-        float boost = 1.0f + smooth(88.0f, 120.0f, t) * 0.78f;
-        float angle = t * 0.086f * boost + (blue ? 0.0f : Mth.PI);
-        float size = Mth.lerp(appear, 0.22f, 1.18f) * Mth.lerp(converge, 1.0f, 0.76f) * vanish;
-        return orb(cx, cy, orbit, angle, size, blue, fusion, t, converge);
+        float appear = smooth(16.0f, 48.0f, t);
+        float converge = smooth(82.0f, 238.0f, t);
+        float fusionColor = smooth(218.0f, 250.0f, t);
+        float vanish = 1.0f - smooth(244.0f, 260.0f, t);
+        float centerX = Mth.lerp(converge, GOJO_X, FUSION_X);
+        float centerY = Mth.lerp(converge, 2.05f, FUSION_Y);
+        float orbit = Mth.lerp(converge, 2.55f, 0.0f);
+        float attractionBoost = 1.0f + smooth(190.0f, 235.0f, t) * 0.48f;
+        float angle = t * 0.055f * attractionBoost + (blue ? 0.0f : Mth.PI);
+        float size = Mth.lerp(appear, 0.28f, 1.10f) * Mth.lerp(converge, 1.0f, 0.80f) * vanish;
+        return orb(centerX, centerY, orbit, angle, size, blue, fusionColor, t, converge);
     }
 
     private static void drawOrb(PoseStack pose, Orb o) {
         if (o.size <= 0.02f) return;
         pose.pushPose();
         pose.translate(o.x, o.y, o.z);
+
         solidSphere(pose, o.size, o.r, o.g, o.b);
-        solidSphere(pose, o.size * 0.25f, 0.96f, 0.98f, 1.0f);
-        glowSphere(pose, o.size * 1.05f, o.r, o.g, o.b, 0.18f);
+
+        // Nucleo del MISMO color, mas brillante. Nada blanco.
+        float cr = Mth.clamp(o.r * 1.20f + 0.035f, 0.0f, 1.0f);
+        float cg = Mth.clamp(o.g * 1.20f + 0.035f, 0.0f, 1.0f);
+        float cb = Mth.clamp(o.b * 1.08f + 0.020f, 0.0f, 1.0f);
+        solidSphere(pose, o.size * 0.22f, cr, cg, cb);
+        glowSphere(pose, o.size * 1.045f, o.r, o.g, o.b, 0.15f);
+
         pose.popPose();
     }
 
     private static void drawTrail(PoseStack pose, float t, boolean blue) {
-        for (int i = 0; i < 10; i++) {
-            float ta = t - i * 2.2f;
-            float tb = t - (i + 1) * 2.2f;
-            if (tb < 5.0f) break;
+        // Estela corta, curva y muy tenue: nunca forma una columna final.
+        for (int i = 0; i < 7; i++) {
+            float ta = t - i * 2.0f;
+            float tb = t - (i + 1) * 2.0f;
+            if (tb < 16.0f || ta > 244.0f) break;
             Orb a = orbAt(ta, blue);
             Orb b = orbAt(tb, blue);
-            float f = 1.0f - i / 10.0f;
-            ribbon(pose, a.x,a.y,a.z, b.x,b.y,b.z, a.r,a.g,a.b, 0.15f*f, 0.06f + 0.08f*f);
+            float f = 1.0f - i / 7.0f;
+            ribbon(pose, a.x,a.y,a.z, b.x,b.y,b.z,
+                    a.r,a.g,a.b, 0.085f*f, 0.038f + 0.050f*f);
         }
     }
 
     private static void drawFusionWeb(PoseStack pose, Orb blue, Orb red, float t, float q) {
         if (q <= 0.01f) return;
-        for (int s = 0; s < 6; s++) {
-            float phase = s * 1.17f + t * 0.11f;
+        for (int strand = 0; strand < 4; strand++) {
+            float phase = strand * 1.55f + t * 0.08f;
             float px = blue.x;
             float py = blue.y;
             float pz = blue.z;
-            for (int i = 1; i <= 12; i++) {
-                float u = i / 12.0f;
+
+            for (int i = 1; i <= 10; i++) {
+                float u = i / 10.0f;
                 float bulge = Mth.sin(u * Mth.PI) * q;
-                float x = Mth.lerp(u, blue.x, red.x) + Mth.cos(phase + u * TAU) * 0.20f * bulge;
-                float y = Mth.lerp(u, blue.y, red.y) + Mth.sin(phase * 0.7f + u * TAU) * 0.18f * bulge;
-                float z = Mth.lerp(u, blue.z, red.z) + Mth.sin(phase + u * TAU) * 0.20f * bulge;
+                float x = Mth.lerp(u, blue.x, red.x) + Mth.cos(phase + u * TAU) * 0.12f * bulge;
+                float y = Mth.lerp(u, blue.y, red.y) + Mth.sin(phase * 0.75f + u * TAU) * 0.10f * bulge;
+                float z = Mth.lerp(u, blue.z, red.z) + Mth.sin(phase + u * TAU) * 0.12f * bulge;
                 float center = 1.0f - Math.abs(u * 2.0f - 1.0f);
+
                 ribbon(pose, px,py,pz, x,y,z,
-                        Mth.lerp(center, blue.r, 0.72f), 0.07f, 1.0f,
-                        0.10f * q, 0.035f + 0.045f * center);
+                        Mth.lerp(center, blue.r, 0.70f), 0.045f, 1.0f,
+                        0.075f * q, 0.026f + 0.025f * center);
                 px=x; py=y; pz=z;
             }
         }
@@ -199,51 +220,34 @@ public final class ClientGojoAttack {
 
     private static void purple(PoseStack pose, float r) {
         if (r <= 0.04f) return;
-        solidSphere(pose, r, 0.47f, 0.025f, 0.92f);
-        solidSphere(pose, r * 0.70f, 0.72f, 0.10f, 1.0f);
-        solidSphere(pose, r * 0.17f, 1.0f, 0.95f, 1.0f);
-        glowSphere(pose, r * 1.05f, 0.84f, 0.10f, 1.0f, 0.18f);
-        glowSphere(pose, r * 1.08f, 0.34f, 0.06f, 1.0f, 0.09f);
-    }
 
-    private static void drawPurpleSpirals(PoseStack pose, float r, float t, float fade) {
-        if (r < 0.3f) return;
-        for (int arm = 0; arm < 4; arm++) {
-            float phase = arm * TAU / 4.0f + t * (arm % 2 == 0 ? 0.035f : -0.030f);
-            float px = 0, py = 0, pz = 0;
-            boolean prev = false;
-            for (int i = 0; i <= 18; i++) {
-                float u = i / 18.0f;
-                float ang = phase + u * TAU * 0.92f;
-                float rr = r * (1.08f + Mth.sin(u * Mth.PI) * 0.08f);
-                float x = Mth.cos(ang) * rr;
-                float y = (u - 0.5f) * r * 1.18f;
-                float z = Mth.sin(ang) * rr;
-                if (prev) {
-                    ribbon(pose, px,py,pz, x,y,z, 0.86f,0.15f,1.0f,0.075f*fade, Math.max(0.035f,r*0.015f));
-                }
-                px=x; py=y; pz=z; prev=true;
-            }
-        }
+        // Todo morado/violeta: cero blanco.
+        solidSphere(pose, r, 0.43f, 0.018f, 0.90f);
+        solidSphere(pose, r * 0.72f, 0.66f, 0.055f, 1.00f);
+        solidSphere(pose, r * 0.16f, 0.88f, 0.30f, 1.00f);
+        glowSphere(pose, r * 1.045f, 0.82f, 0.09f, 1.0f, 0.16f);
+        glowSphere(pose, r * 1.075f, 0.34f, 0.04f, 1.0f, 0.075f);
     }
 
     private static void solidSphere(PoseStack pose, float radius, float r, float g, float b) {
+        if (radius <= 0.02f) return;
         setSolid();
         sphere(pose, radius, r,g,b,1.0f);
     }
 
     private static void glowSphere(PoseStack pose, float radius, float r, float g, float b, float a) {
+        if (radius <= 0.02f || a <= 0.005f) return;
         setGlow();
         sphere(pose, radius, r,g,b,a);
     }
 
     private static void sphere(PoseStack pose, float radius, float r, float g, float b, float a) {
-        if (radius <= 0.02f) return;
         Matrix4f m = pose.last().pose();
         BufferBuilder bb = Tesselator.getInstance().getBuilder();
         bb.begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_COLOR);
-        final int lon = 80;
-        final int lat = 44;
+
+        final int lon = 88;
+        final int lat = 48;
         for (int iy=0; iy<lat; iy++) {
             float p0 = ((float)iy/lat - 0.5f) * Mth.PI;
             float p1 = ((float)(iy+1)/lat - 0.5f) * Mth.PI;
@@ -275,14 +279,16 @@ public final class ClientGojoAttack {
         Matrix4f m = pose.last().pose();
         BufferBuilder bb = Tesselator.getInstance().getBuilder();
         bb.begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_COLOR);
+
         vertex(bb,m,x0,y0-w,z0,r,g,b,a);
         vertex(bb,m,x0,y0+w,z0,r,g,b,a);
         vertex(bb,m,x1,y1+w,z1,r,g,b,a);
         vertex(bb,m,x1,y1-w,z1,r,g,b,a);
-        vertex(bb,m,x0-w,y0,z0,r,g,b,a*0.75f);
-        vertex(bb,m,x0+w,y0,z0,r,g,b,a*0.75f);
-        vertex(bb,m,x1+w,y1,z1,r,g,b,a*0.75f);
-        vertex(bb,m,x1-w,y1,z1,r,g,b,a*0.75f);
+
+        vertex(bb,m,x0-w,y0,z0,r,g,b,a*0.70f);
+        vertex(bb,m,x0+w,y0,z0,r,g,b,a*0.70f);
+        vertex(bb,m,x1+w,y1,z1,r,g,b,a*0.70f);
+        vertex(bb,m,x1-w,y1,z1,r,g,b,a*0.70f);
         BufferUploader.drawWithShader(bb.end());
     }
 
