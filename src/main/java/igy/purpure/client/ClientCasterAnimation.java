@@ -24,7 +24,7 @@ public final class ClientCasterAnimation {
         if (!(event.getEntity() instanceof AbstractClientPlayer player)) return;
 
         float tick = ClientPurpureEffects.effectTick(player.getUUID());
-        if (tick < 0.0f || tick > 215.0f) return;
+        if (tick < 0.0f || tick > 205.0f) return;
 
         PlayerModel<AbstractClientPlayer> model = event.getRenderer().getModel();
         BACKUPS.put(player.getUUID(), new PoseBackup(model));
@@ -34,36 +34,43 @@ public final class ClientCasterAnimation {
     @SubscribeEvent
     public static void onPlayerRenderPost(RenderPlayerEvent.Post event) {
         PoseBackup backup = BACKUPS.remove(event.getEntity().getUUID());
-        if (backup != null) {
-            backup.restore(event.getRenderer().getModel());
-        }
+        if (backup != null) backup.restore(event.getRenderer().getModel());
     }
 
     private static void applyCasterPose(PlayerModel<AbstractClientPlayer> model, float t) {
-        if (t < 55.0f) {
-            float q = smooth(0.0f, 45.0f, t);
-            setPart(model.rightArm, Mth.lerp(q, model.rightArm.xRot, -1.02f), -0.24f * q, 0.16f * q);
-            setPart(model.leftArm, Mth.lerp(q, model.leftArm.xRot, -0.88f), 0.30f * q, -0.12f * q);
-            model.body.yRot = Mth.lerp(q, model.body.yRot, 0.07f);
-            model.head.xRot = Mth.lerp(q, model.head.xRot, -0.06f);
-        } else if (t < 105.0f) {
-            float q = smooth(55.0f, 95.0f, t);
-            setPart(model.rightArm, Mth.lerp(q, -1.02f, -1.28f), Mth.lerp(q, -0.24f, -0.58f), Mth.lerp(q, 0.16f, 0.23f));
-            setPart(model.leftArm, Mth.lerp(q, -0.88f, -1.22f), Mth.lerp(q, 0.30f, 0.58f), Mth.lerp(q, -0.12f, -0.23f));
+        if (t < 48.0f) {
+            float q = smooth(0.0f, 42.0f, t);
+            setPart(model.rightArm, Mth.lerp(q, model.rightArm.xRot, -1.35f), -0.72f * q, 0.34f * q);
+            setPart(model.leftArm, Mth.lerp(q, model.leftArm.xRot, -1.05f), 0.55f * q, -0.28f * q);
+            model.body.yRot = 0.11f * q;
+            model.head.xRot = -0.10f * q;
+            model.head.yRot = -0.10f * q;
+        } else if (t < 96.0f) {
+            float q = smooth(48.0f, 88.0f, t);
+            setPart(model.rightArm, Mth.lerp(q, -1.35f, -1.56f), Mth.lerp(q, -0.72f, -0.92f), Mth.lerp(q, 0.34f, 0.47f));
+            setPart(model.leftArm, Mth.lerp(q, -1.05f, -1.50f), Mth.lerp(q, 0.55f, 0.88f), Mth.lerp(q, -0.28f, -0.47f));
+            model.body.yRot = Mth.lerp(q, 0.11f, 0.0f);
+            model.head.xRot = -0.12f;
+            model.head.yRot = Mth.sin(t * 0.035f) * 0.10f;
+        } else if (t < 136.0f) {
+            float q = smooth(96.0f, 128.0f, t);
+            setPart(model.rightArm, Mth.lerp(q, -1.56f, -1.72f), Mth.lerp(q, -0.92f, -0.20f), Mth.lerp(q, 0.47f, 0.16f));
+            setPart(model.leftArm, Mth.lerp(q, -1.50f, -1.72f), Mth.lerp(q, 0.88f, 0.20f), Mth.lerp(q, -0.47f, -0.16f));
             model.body.yRot = 0.0f;
-            model.head.xRot = -0.08f;
-        } else if (t < 150.0f) {
-            float q = smooth(105.0f, 142.0f, t);
-            setPart(model.rightArm, Mth.lerp(q, -1.28f, -1.48f), Mth.lerp(q, -0.58f, -0.18f), Mth.lerp(q, 0.23f, 0.42f));
-            setPart(model.leftArm, Mth.lerp(q, -1.22f, -1.48f), Mth.lerp(q, 0.58f, 0.18f), Mth.lerp(q, -0.23f, -0.42f));
-            model.body.yRot = 0.0f;
-            model.head.xRot = -0.10f;
+            model.head.xRot = -0.16f;
+            model.head.yRot = 0.0f;
+        } else if (t < 170.0f) {
+            float q = smooth(136.0f, 160.0f, t);
+            setPart(model.rightArm, Mth.lerp(q, -1.72f, -1.86f), Mth.lerp(q, -0.20f, 0.0f), Mth.lerp(q, 0.16f, 0.0f));
+            setPart(model.leftArm, Mth.lerp(q, -1.72f, -0.72f), Mth.lerp(q, 0.20f, 0.32f), Mth.lerp(q, -0.16f, -0.22f));
+            model.body.yRot = Mth.lerp(q, 0.0f, -0.08f);
+            model.head.xRot = Mth.lerp(q, -0.16f, -0.04f);
         } else {
-            float q = smooth(150.0f, 185.0f, t);
-            setPart(model.rightArm, Mth.lerp(q, -1.48f, -1.56f), Mth.lerp(q, -0.18f, -0.03f), Mth.lerp(q, 0.42f, 0.02f));
-            setPart(model.leftArm, Mth.lerp(q, -1.48f, -0.52f), Mth.lerp(q, 0.18f, 0.16f), Mth.lerp(q, -0.42f, -0.16f));
-            model.body.yRot = Mth.lerp(q, 0.0f, -0.05f);
-            model.head.xRot = Mth.lerp(q, -0.10f, -0.03f);
+            float q = smooth(170.0f, 195.0f, t);
+            setPart(model.rightArm, Mth.lerp(q, -1.86f, -1.52f), 0.0f, 0.0f);
+            setPart(model.leftArm, Mth.lerp(q, -0.72f, -0.42f), 0.20f, -0.14f);
+            model.body.yRot = -0.06f;
+            model.head.xRot = -0.02f;
         }
 
         copyRot(model.rightArm, model.rightSleeve);
