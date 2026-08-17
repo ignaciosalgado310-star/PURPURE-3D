@@ -11,9 +11,12 @@ import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 
+/**
+ * V8 cinematic camera. El jugador mira a Gojo desde tercera persona trasera,
+ * para que Gojo permanezca enfrente y visible durante toda la preparacion.
+ */
 @Mod.EventBusSubscriber(modid = PurpureMod.MODID, value = Dist.CLIENT, bus = Mod.EventBusSubscriber.Bus.FORGE)
 public final class ClientCinematicDirectorV2 {
-    private static final float TIME_SCALE = 0.68f;
     private static CameraType previousCamera;
     private static boolean controllingCamera;
 
@@ -28,8 +31,8 @@ public final class ClientCinematicDirectorV2 {
             return;
         }
 
-        float raw = ClientPurpureEffects.effectTick(mc.player.getUUID());
-        boolean cinematic = raw >= 0.0f && raw <= 345.0f;
+        float t = ClientPurpureEffects.effectTick(mc.player.getUUID());
+        boolean cinematic = t >= 0.0f && t <= 365.0f;
         if (!cinematic) {
             restore();
             return;
@@ -40,8 +43,9 @@ public final class ClientCinematicDirectorV2 {
             controllingCamera = true;
         }
 
-        float t = raw * TIME_SCALE;
-        mc.options.setCameraType(t < 116.0f ? CameraType.THIRD_PERSON_FRONT : CameraType.THIRD_PERSON_BACK);
+        // SIEMPRE detras del jugador: como el servidor lo hace mirar a Gojo,
+        // Gojo queda enfrente de la camara y no escondido detras.
+        mc.options.setCameraType(CameraType.THIRD_PERSON_BACK);
     }
 
     private static void restore() {
@@ -57,56 +61,57 @@ public final class ClientCinematicDirectorV2 {
     public static void camera(ViewportEvent.ComputeCameraAngles event) {
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null) return;
-        float raw = ClientPurpureEffects.effectTick(mc.player.getUUID());
-        if (raw < 0.0f || raw > 345.0f) return;
+        float t = ClientPurpureEffects.effectTick(mc.player.getUUID());
+        if (t < 0.0f || t > 365.0f) return;
 
-        float t = (raw + (float) event.getPartialTick()) * TIME_SCALE;
-        float intro = smooth(0.0f, 42.0f, t) * (1.0f - smooth(66.0f, 86.0f, t));
-        float control = smooth(52.0f, 82.0f, t) * (1.0f - smooth(118.0f, 140.0f, t));
-        float fusion = smooth(112.0f, 144.0f, t) * (1.0f - smooth(168.0f, 188.0f, t));
-        float launch = smooth(166.0f, 205.0f, t);
+        t += (float)event.getPartialTick();
 
+        float intro = smooth(0.0f, 42.0f, t) * (1.0f - smooth(72.0f, 100.0f, t));
+        float control = smooth(80.0f, 120.0f, t) * (1.0f - smooth(205.0f, 225.0f, t));
+        float fusion = smooth(220.0f, 245.0f, t) * (1.0f - smooth(270.0f, 290.0f, t));
+        float launch = smooth(300.0f, 340.0f, t) * (1.0f - smooth(350.0f, 365.0f, t));
+
+        // Movimiento pequeno: no giramos tanto la camara como para sacar a Gojo del encuadre.
         event.setYaw(event.getYaw()
-                + Mth.sin(t * 0.043f) * 7.0f * intro
-                + Mth.sin(t * 0.056f) * 5.2f * control
-                + Mth.sin(t * 0.19f) * 1.0f * fusion);
-        event.setPitch(event.getPitch() - 2.0f * intro - 1.3f * control + 1.0f * launch);
+                + Mth.sin(t * 0.045f) * 2.4f * intro
+                + Mth.sin(t * 0.035f) * 1.5f * control
+                + Mth.sin(t * 0.20f) * 0.65f * fusion);
+        event.setPitch(event.getPitch() - 1.5f * intro - 0.8f * control + 0.6f * launch);
         event.setRoll(event.getRoll()
-                + Mth.sin(t * 0.076f) * 0.7f * control
-                + Mth.sin(t * 0.31f) * 0.65f * fusion);
+                + Mth.sin(t * 0.080f) * 0.40f * control
+                + Mth.sin(t * 0.31f) * 0.55f * fusion);
     }
 
     @SubscribeEvent
     public static void overlay(RenderGuiOverlayEvent.Post event) {
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null) return;
-        float raw = ClientPurpureEffects.effectTick(mc.player.getUUID());
-        if (raw < 0.0f || raw > 345.0f) return;
-        float t = raw * TIME_SCALE;
+        float t = ClientPurpureEffects.effectTick(mc.player.getUUID());
+        if (t < 0.0f || t > 365.0f) return;
 
         int w = event.getWindow().getGuiScaledWidth();
         int h = event.getWindow().getGuiScaledHeight();
 
-        float bars = smooth(0.0f, 16.0f, t) * (1.0f - smooth(204.0f, 230.0f, t));
-        int barHeight = (int)(h * 0.045f * bars);
+        float bars = smooth(0.0f, 18.0f, t) * (1.0f - smooth(342.0f, 365.0f, t));
+        int barHeight = (int)(h * 0.040f * bars);
         if (barHeight > 0) {
-            event.getGuiGraphics().fill(0, 0, w, barHeight, 0xC9000000);
-            event.getGuiGraphics().fill(0, h - barHeight, w, h, 0xC9000000);
+            event.getGuiGraphics().fill(0, 0, w, barHeight, 0xC2000000);
+            event.getGuiGraphics().fill(0, h - barHeight, w, h, 0xC2000000);
         }
 
-        // Tinte mucho mas suave que V6/V7 para no tapar a Gojo ni meter la camara en una pared morada.
-        float purple = smooth(132.0f, 166.0f, t) * (1.0f - smooth(204.0f, 228.0f, t));
-        int pa = Mth.clamp((int)(purple * 18.0f), 0, 22);
+        // Morado SOLO cuando ya empieza la fusion real.
+        float purpleTint = smooth(238.0f, 265.0f, t) * (1.0f - smooth(338.0f, 360.0f, t));
+        int pa = Mth.clamp((int)(purpleTint * 13.0f), 0, 16);
         if (pa > 0) {
-            event.getGuiGraphics().fill(0, 0, w, h, (pa << 24) | 0x6500E8);
+            event.getGuiGraphics().fill(0, 0, w, h, (pa << 24) | 0x6200E8);
         }
 
-        // Flash corto en el nacimiento y otro pequeno al lanzamiento.
-        float birthFlash = 1.0f - Mth.clamp(Math.abs(t - 148.0f) / 4.0f, 0.0f, 1.0f);
-        float launchFlash = 1.0f - Mth.clamp(Math.abs(t - 202.0f) / 5.5f, 0.0f, 1.0f);
-        int wa = Mth.clamp((int)(birthFlash * 46.0f + launchFlash * 34.0f), 0, 54);
-        if (wa > 0) {
-            event.getGuiGraphics().fill(0, 0, w, h, (wa << 24) | 0xFFFFFF);
+        // Antes era blanco. Ahora los dos flashes son morados y suaves.
+        float birthFlash = 1.0f - Mth.clamp(Math.abs(t - 255.0f) / 4.5f, 0.0f, 1.0f);
+        float launchFlash = 1.0f - Mth.clamp(Math.abs(t - 338.0f) / 5.5f, 0.0f, 1.0f);
+        int fa = Mth.clamp((int)(birthFlash * 30.0f + launchFlash * 25.0f), 0, 34);
+        if (fa > 0) {
+            event.getGuiGraphics().fill(0, 0, w, h, (fa << 24) | 0xA52CFF);
         }
     }
 
