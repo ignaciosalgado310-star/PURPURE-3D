@@ -26,13 +26,13 @@ jobs:
         with:
           gradle-version: '8.1.1'
 
-      - name: Prepare V8 clean build
+      - name: Prepare PURPURE 3D V9
         run: |
-          # El JAR final recibe el audio original despues del build.
+          # Reconstruye dentro del JAR el audio completo extraido del video de referencia.
+          base64 -d src/main/resources/assets/purpure/sounds/hollow_purple_video.b64 > src/main/resources/assets/purpure/sounds/hollow_purple_video.ogg
           rm -f src/main/resources/assets/purpure/sounds/hollow_purple_video.b64
 
-          # Quitamos renderers experimentales anteriores. V8 usa solo:
-          # ClientGojoAttack + NPC Gojo visible del servidor.
+          # Renderers experimentales anteriores: la version actual usa ClientGojoAttack.
           rm -f src/main/java/igy/purpure/client/ClientCasterAnimation.java
           rm -f src/main/java/igy/purpure/client/ClientEnergyEnhancements.java
           rm -f src/main/java/igy/purpure/client/ClientCinematicDirector.java
