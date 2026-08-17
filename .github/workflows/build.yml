@@ -26,7 +26,7 @@ jobs:
         with:
           gradle-version: '8.1.1'
 
-      - name: Prepare Gojo cinematic build
+      - name: Prepare Gojo NPC build
         run: |
           rm -f src/main/resources/assets/purpure/sounds/hollow_purple_video.b64
           rm -f src/main/java/igy/purpure/client/ClientCasterAnimation.java
@@ -36,8 +36,7 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
 
-          # El mapa ACTIVE de esta clase sigue controlando el timing y los paquetes,
-          # pero apagamos su render viejo para que solo se vea el Gojo caster nuevo.
+          # El mapa ACTIVE sigue controlando paquetes/timing, pero apagamos su render viejo.
           effects = Path('src/main/java/igy/purpure/client/ClientPurpureEffects.java')
           text = effects.read_text()
           old = 'if (event.getStage() != RenderLevelStageEvent.Stage.AFTER_PARTICLES || ACTIVE.isEmpty()) return;'
@@ -45,9 +44,12 @@ jobs:
               text = text.replace(old, 'if (true) return;', 1)
           effects.write_text(text)
 
-          # Ajusta toda la secuencia visual a ~15 s de audio activo del nuevo video.
+          # Conservamos los orbes/fusion de ClientGojoAttack, pero el Gojo visual ahora
+          # es el ArmorStand real creado por el servidor para garantizar que aparezca.
           attack = Path('src/main/java/igy/purpure/client/ClientGojoAttack.java')
           text = attack.read_text()
+          text = text.replace('ClientGojoCaster.render(pose, t);', '// Gojo visual = NPC server-side', 1)
+
           old = 'float t = base + partial;'
           new = 'float t = (base + partial) * 0.68f;'
           if old not in text:
@@ -58,7 +60,7 @@ jobs:
           text = text.replace('smooth(330.0f, 365.0f, t)', 'smooth(210.0f, 235.0f, t)')
           attack.write_text(text)
 
-          # El golpe/destruccion cae justo antes de que el nuevo audio entre en silencio.
+          # El golpe/destruccion cae cerca del final hablado del audio.
           server = Path('src/main/java/igy/purpure/server/PurpureServerEvents.java')
           text = server.read_text()
           if 'private static final int IMPACT = 190;' not in text:
