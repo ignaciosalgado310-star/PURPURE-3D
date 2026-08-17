@@ -21,7 +21,8 @@ public final class ClientCasterAnimation {
 
     @SubscribeEvent
     public static void onPlayerRenderPre(RenderPlayerEvent.Pre event) {
-        AbstractClientPlayer player = event.getEntity();
+        if (!(event.getEntity() instanceof AbstractClientPlayer player)) return;
+
         float tick = ClientPurpureEffects.effectTick(player.getUUID());
         if (tick < 0.0f || tick > 215.0f) return;
 
