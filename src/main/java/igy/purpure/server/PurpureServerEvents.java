@@ -31,7 +31,9 @@ import java.util.UUID;
 @Mod.EventBusSubscriber(modid = PurpureMod.MODID, bus = Mod.EventBusSubscriber.Bus.FORGE)
 public final class PurpureServerEvents {
     private static final Map<UUID, Ritual> ACTIVE = new HashMap<>();
-    private static final int IMPACT = 410;
+
+    // V5: el impacto llega mucho antes para seguir el ritmo de la nueva animacion.
+    private static final int IMPACT = 190;
     private static final int INTERVAL = 2;
 
     private PurpureServerEvents() {}
@@ -139,7 +141,9 @@ public final class PurpureServerEvents {
         }
 
         int end() {
-            return Math.max(540, IMPACT + hits * INTERVAL + 80);
+            // ~16.5 s minimo: suficiente para la parte hablada/activa del audio del video,
+            // sin dejar al jugador congelado durante el silencio final del clip.
+            return Math.max(330, IMPACT + hits * INTERVAL + 90);
         }
 
         void tick(ServerPlayer player) {
