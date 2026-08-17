@@ -47,6 +47,11 @@ public final class ClientPurpureEffects {
         }
     }
 
+    public static float effectTick(UUID playerId) {
+        FX fx = ACTIVE.get(playerId);
+        return fx == null ? -1.0f : fx.t;
+    }
+
     @SubscribeEvent
     public static void tick(TickEvent.ClientTickEvent event) {
         if (event.phase == TickEvent.Phase.END && Minecraft.getInstance().level != null && !Minecraft.getInstance().isPaused()) {
@@ -62,13 +67,16 @@ public final class ClientPurpureEffects {
         for (FX fx : ACTIVE.values()) {
             float t = fx.t + (float) event.getPartialTick();
             double distanceSq = mc.player.distanceToSqr(fx.x, fx.y, fx.z);
-            if (distanceSq > 3600.0 || t < 235.0f) continue;
+            if (distanceSq > 3600.0 || t < 112.0f) continue;
 
             float distanceFactor = (float) Math.max(0.0, 1.0 - Math.sqrt(distanceSq) / 60.0);
-            float power = t < 410.0f ? 0.18f : 0.72f;
-            event.setYaw(event.getYaw() + Mth.sin(t * 0.83f) * 0.45f * distanceFactor * power);
-            event.setPitch(event.getPitch() + Mth.cos(t * 1.04f) * 0.38f * distanceFactor * power);
-            event.setRoll(event.getRoll() + Mth.sin(t * 0.61f) * 0.72f * distanceFactor * power);
+            float fusionKick = smooth(112.0f, 145.0f, t) * (1.0f - smooth(150.0f, 175.0f, t));
+            float impactKick = smooth(180.0f, 195.0f, t);
+            float power = 0.12f + fusionKick * 0.22f + impactKick * 0.55f;
+
+            event.setYaw(event.getYaw() + Mth.sin(t * 0.91f) * 0.40f * distanceFactor * power);
+            event.setPitch(event.getPitch() + Mth.cos(t * 1.11f) * 0.34f * distanceFactor * power);
+            event.setRoll(event.getRoll() + Mth.sin(t * 0.67f) * 0.62f * distanceFactor * power);
         }
     }
 
@@ -102,31 +110,31 @@ public final class ClientPurpureEffects {
     }
 
     private static void drawEffect(PoseStack pose, FX fx, float t) {
-        // V4: mismas fases, pero Azul y Rojo son un poco mas pequenos,
-        // totalmente lisos y realmente convergen al centro para convertirse en Morado.
-        if (t < 285.0f) {
-            float appear = smooth(15.0f, 70.0f, t);
-            float converge = smooth(205.0f, 275.0f, t);
-            float disappear = 1.0f - smooth(270.0f, 285.0f, t);
+        // V5: intro mas rapida, orbes lisos, fusion visible Azul + Rojo -> Morado.
+        if (t < 145.0f) {
+            float appear = smooth(5.0f, 28.0f, t);
+            float convergence = smooth(67.0f, 124.0f, t);
+            float fusionColor = smooth(82.0f, 132.0f, t);
+            float disappear = 1.0f - smooth(126.0f, 145.0f, t);
 
-            float orbitRadius = Mth.lerp(converge, 9.3f, 0.0f);
-            float angle = t * 0.043f;
-            float size = Mth.lerp(appear, 0.48f, 2.95f);
-            size *= Mth.lerp(converge, 1.0f, 0.62f) * disappear;
+            float orbitRadius = Mth.lerp(convergence, 6.9f, 0.0f);
+            float attractionBoost = 1.0f + smooth(88.0f, 120.0f, t) * 0.72f;
+            float angle = t * 0.075f * attractionBoost;
 
-            float blueBaseY = 2.0f + Mth.sin(t * 0.028f) * 0.75f;
-            float redBaseY = 2.0f + Mth.cos(t * 0.026f + 1.3f) * 0.75f;
-            float blueY = Mth.lerp(converge, blueBaseY, 2.35f);
-            float redY = Mth.lerp(converge, redBaseY, 2.35f);
+            float size = Mth.lerp(appear, 0.42f, 2.35f);
+            size *= Mth.lerp(convergence, 1.0f, 0.70f) * disappear;
 
-            // Conforme se juntan, ambos tonos se vuelven violeta antes de desaparecer.
-            float blueR = Mth.lerp(converge, 0.035f, 0.49f);
-            float blueG = Mth.lerp(converge, 0.28f, 0.035f);
-            float blueB = Mth.lerp(converge, 1.0f, 0.95f);
+            float baseY = Mth.lerp(smooth(0.0f, 38.0f, t), -0.6f, 3.05f);
+            float blueY = Mth.lerp(convergence, baseY + Mth.sin(t * 0.075f) * 0.28f, 2.55f);
+            float redY = Mth.lerp(convergence, baseY + Mth.cos(t * 0.072f + 1.2f) * 0.28f, 2.55f);
 
-            float redR = Mth.lerp(converge, 1.0f, 0.49f);
-            float redG = Mth.lerp(converge, 0.035f, 0.035f);
-            float redB = Mth.lerp(converge, 0.075f, 0.95f);
+            float blueR = Mth.lerp(fusionColor, 0.025f, 0.52f);
+            float blueG = Mth.lerp(fusionColor, 0.30f, 0.07f);
+            float blueB = Mth.lerp(fusionColor, 1.00f, 0.96f);
+
+            float redR = Mth.lerp(fusionColor, 1.00f, 0.52f);
+            float redG = Mth.lerp(fusionColor, 0.025f, 0.07f);
+            float redB = Mth.lerp(fusionColor, 0.070f, 0.96f);
 
             drawEnergyOrb(
                     pose,
@@ -145,27 +153,46 @@ public final class ClientPurpureEffects {
                     size,
                     redR, redG, redB
             );
+
+            // La zona de contacto nace violeta antes de que desaparezcan los dos orbes.
+            if (t >= 82.0f) {
+                float contact = smooth(82.0f, 128.0f, t) * disappear;
+                pose.pushPose();
+                pose.translate(0.0, 2.55, 0.0);
+                float contactRadius = Mth.lerp(contact, 0.12f, 1.65f);
+                drawSolidSphere(pose, contactRadius, 0.58f, 0.06f, 0.98f);
+                drawGlowShell(pose, contactRadius * 1.08f, 0.82f, 0.18f, 1.0f, 0.16f * contact);
+                pose.popPose();
+            }
         }
 
-        // El Morado empieza pequeno solo cuando Azul y Rojo ya estan acercandose.
-        if (t >= 220.0f) {
-            float growth = smooth(220.0f, 290.0f, t);
-            float impactHoldEnd = Math.max(500.0f, 410.0f + fx.hits * 2.0f + 20.0f);
-            float fade = 1.0f - smooth(impactHoldEnd, impactHoldEnd + 40.0f, t);
-            float radius = Mth.lerp(growth, 0.20f, 8.9f) * fade;
+        // Morado nace pequeno, pulsa y luego crece: no aparece de golpe.
+        if (t >= 102.0f) {
+            float born = smooth(102.0f, 136.0f, t);
+            float expansion = smooth(132.0f, 176.0f, t);
+            float impactHoldEnd = Math.max(330.0f, 190.0f + fx.hits * 2.0f + 90.0f);
+            float fade = 1.0f - smooth(impactHoldEnd, impactHoldEnd + 35.0f, t);
+
+            float smallRadius = Mth.lerp(born, 0.12f, 2.15f);
+            float radius = Mth.lerp(expansion, smallRadius, 6.95f);
+            if (t >= 132.0f && t <= 158.0f) {
+                float pulse = 1.0f + Mth.sin((t - 132.0f) * 0.42f) * 0.055f * (1.0f - smooth(148.0f, 160.0f, t));
+                radius *= pulse;
+            }
+            radius *= fade;
 
             pose.pushPose();
-            pose.translate(0.0, Mth.lerp(smooth(220.0f, 300.0f, t), 2.35f, 2.0f), 0.0);
-            pose.mulPose(Axis.YP.rotationDegrees(t * 0.36f));
+            pose.translate(0.0, Mth.lerp(smooth(102.0f, 176.0f, t), 2.55f, 1.85f), 0.0);
+            pose.mulPose(Axis.YP.rotationDegrees(t * 0.30f));
             drawPurpleCore(pose, radius);
 
-            if (t >= 250.0f && t <= 300.0f) {
-                float flash = 1.0f - Math.abs((t - 275.0f) / 25.0f);
+            if (t >= 160.0f && t <= 205.0f) {
+                float flash = 1.0f - Math.abs((t - 185.0f) / 25.0f);
                 flash = Mth.clamp(flash, 0.0f, 1.0f);
-                drawGlowShell(pose, radius * (1.05f + flash * 0.12f), 1.0f, 0.78f, 1.0f, 0.22f * flash);
+                drawGlowShell(pose, radius * (1.04f + flash * 0.10f), 1.0f, 0.78f, 1.0f, 0.18f * flash);
             }
 
-            if (t > 300.0f && fade > 0.02f) {
+            if (t > 176.0f && fade > 0.02f) {
                 drawEnergyColumn(pose, radius, t, fade);
             }
             pose.popPose();
@@ -179,10 +206,9 @@ public final class ClientPurpureEffects {
         pose.pushPose();
         pose.translate(x, y, z);
 
-        // Superficie totalmente lisa: sin warp/deformaciones.
         drawSolidSphere(pose, radius, red, green, blue);
-        drawSolidSphere(pose, radius * 0.34f, 0.96f, 0.98f, 1.0f);
-        drawGlowShell(pose, radius * 1.045f, red, green, blue, 0.18f);
+        drawSolidSphere(pose, radius * 0.28f, 0.96f, 0.98f, 1.0f);
+        drawGlowShell(pose, radius * 1.035f, red, green, blue, 0.15f);
 
         pose.popPose();
     }
@@ -190,27 +216,26 @@ public final class ClientPurpureEffects {
     private static void drawPurpleCore(PoseStack pose, float radius) {
         if (radius <= 0.05f) return;
 
-        // Morado liso, redondo y sin ninguna deformacion.
-        drawSolidSphere(pose, radius, 0.49f, 0.035f, 0.95f);
-        drawSolidSphere(pose, radius * 0.69f, 0.76f, 0.12f, 1.0f);
-        drawSolidSphere(pose, radius * 0.24f, 1.0f, 0.94f, 1.0f);
-        drawGlowShell(pose, radius * 1.055f, 0.87f, 0.10f, 1.0f, 0.22f);
-        drawGlowShell(pose, radius * 1.09f, 0.38f, 0.08f, 1.0f, 0.12f);
+        drawSolidSphere(pose, radius, 0.47f, 0.025f, 0.92f);
+        drawSolidSphere(pose, radius * 0.70f, 0.72f, 0.10f, 1.0f);
+        drawSolidSphere(pose, radius * 0.18f, 1.0f, 0.95f, 1.0f);
+        drawGlowShell(pose, radius * 1.045f, 0.84f, 0.10f, 1.0f, 0.18f);
+        drawGlowShell(pose, radius * 1.075f, 0.34f, 0.06f, 1.0f, 0.09f);
     }
 
     private static void drawEnergyColumn(PoseStack pose, float radius, float t, float fade) {
         setGlowState();
-        for (int i = 0; i < 6; i++) {
+        for (int i = 0; i < 5; i++) {
             pose.pushPose();
-            pose.mulPose(Axis.YP.rotationDegrees(i * 30.0f + t * (i % 2 == 0 ? 0.22f : -0.18f)));
+            pose.mulPose(Axis.YP.rotationDegrees(i * 36.0f + t * (i % 2 == 0 ? 0.20f : -0.16f)));
             Matrix4f matrix = pose.last().pose();
             BufferBuilder builder = Tesselator.getInstance().getBuilder();
             builder.begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_COLOR);
 
-            float width = Math.max(2.3f, radius * (0.20f + i * 0.025f));
-            float height = 52.0f;
-            float alphaBottom = (0.10f - i * 0.009f) * fade;
-            float alphaTop = (0.24f - i * 0.018f) * fade;
+            float width = Math.max(1.8f, radius * (0.17f + i * 0.02f));
+            float height = 44.0f;
+            float alphaBottom = (0.075f - i * 0.006f) * fade;
+            float alphaTop = (0.18f - i * 0.014f) * fade;
 
             vertex(builder, matrix, -width, -height, 0.0f, 0.42f, 0.08f, 1.0f, alphaBottom);
             vertex(builder, matrix,  width, -height, 0.0f, 0.42f, 0.08f, 1.0f, alphaBottom);
@@ -260,7 +285,7 @@ public final class ClientPurpureEffects {
         BufferBuilder builder = Tesselator.getInstance().getBuilder();
         builder.begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_COLOR);
 
-        // Mas segmentos para que las esferas se vean cerradas, lisas y sin cortes.
+        // Geometria lisa: sin warping/deformaciones, con bastante detalle para evitar cortes.
         final int longitude = 112;
         final int latitude = 60;
 
