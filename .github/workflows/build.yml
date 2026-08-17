@@ -28,9 +28,13 @@ jobs:
 
       - name: Prepare PURPURE 3D V9
         run: |
-          # Reconstruye dentro del JAR el audio completo extraido del video de referencia.
-          base64 -d src/main/resources/assets/purpure/sounds/hollow_purple_video.b64 > src/main/resources/assets/purpure/sounds/hollow_purple_video.ogg
+          # Une las 7 partes del audio extraido del video de referencia y genera el OGG real.
+          cat src/main/resources/assets/purpure/sounds/hollow_purple_video.0*.b64 > /tmp/hollow_purple_video.b64
+          base64 -d /tmp/hollow_purple_video.b64 > src/main/resources/assets/purpure/sounds/hollow_purple_video.ogg
+
+          # Evita que los .b64 terminen dentro del JAR.
           rm -f src/main/resources/assets/purpure/sounds/hollow_purple_video.b64
+          rm -f src/main/resources/assets/purpure/sounds/hollow_purple_video.0*.b64
 
           # Renderers experimentales anteriores: la version actual usa ClientGojoAttack.
           rm -f src/main/java/igy/purpure/client/ClientCasterAnimation.java
@@ -39,6 +43,11 @@ jobs:
           rm -f src/main/java/igy/purpure/client/ClientGojoSkinCaster.java
           rm -f src/main/java/igy/purpure/client/ClientGojoCaster.java
           rm -f src/main/resources/assets/purpure/textures/entity/gojo_skin.b64
+
+      - name: Verify audio
+        run: |
+          test -s src/main/resources/assets/purpure/sounds/hollow_purple_video.ogg
+          file src/main/resources/assets/purpure/sounds/hollow_purple_video.ogg
 
       - name: Build Forge mod
         run: gradle clean build --stacktrace
