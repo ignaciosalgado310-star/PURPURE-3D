@@ -26,17 +26,21 @@ jobs:
         with:
           gradle-version: '8.1.1'
 
-      - name: Prepare Gojo NPC build
+      - name: Prepare Gojo skin caster build
         run: |
           rm -f src/main/resources/assets/purpure/sounds/hollow_purple_video.b64
           rm -f src/main/java/igy/purpure/client/ClientCasterAnimation.java
           rm -f src/main/java/igy/purpure/client/ClientEnergyEnhancements.java
           rm -f src/main/java/igy/purpure/client/ClientCinematicDirector.java
 
+          mkdir -p src/main/resources/assets/purpure/textures/entity
+          base64 -d src/main/resources/assets/purpure/textures/entity/gojo_skin.b64 > src/main/resources/assets/purpure/textures/entity/gojo_skin.png
+          rm -f src/main/resources/assets/purpure/textures/entity/gojo_skin.b64
+
           python3 - <<'PY'
           from pathlib import Path
 
-          # El mapa ACTIVE sigue controlando paquetes/timing, pero apagamos su render viejo.
+          # ACTIVE sigue dando el timing, pero apagamos la esfera vieja duplicada.
           effects = Path('src/main/java/igy/purpure/client/ClientPurpureEffects.java')
           text = effects.read_text()
           old = 'if (event.getStage() != RenderLevelStageEvent.Stage.AFTER_PARTICLES || ACTIVE.isEmpty()) return;'
@@ -44,28 +48,59 @@ jobs:
               text = text.replace(old, 'if (true) return;', 1)
           effects.write_text(text)
 
-          # Conservamos los orbes/fusion de ClientGojoAttack, pero el Gojo visual ahora
-          # es el ArmorStand real creado por el servidor para garantizar que aparezca.
+          # Conservamos orbes/fusion de ClientGojoAttack. El personaje visible ahora
+          # lo dibuja ClientGojoSkinCaster como PlayerModel con skin Minecraft 64x64.
           attack = Path('src/main/java/igy/purpure/client/ClientGojoAttack.java')
           text = attack.read_text()
-          text = text.replace('ClientGojoCaster.render(pose, t);', '// Gojo visual = NPC server-side', 1)
+          text = text.replace('ClientGojoCaster.render(pose, t);', '// Gojo visual = PlayerModel con skin propia', 1)
 
           old = 'float t = base + partial;'
           new = 'float t = (base + partial) * 0.68f;'
-          if old not in text:
-              raise SystemExit('Could not find ClientGojoAttack time line')
-          text = text.replace(old, new, 1)
+          if old in text:
+              text = text.replace(old, new, 1)
           text = text.replace('1.18f', '0.92f')
           text = text.replace('6.95f', '3.85f')
           text = text.replace('smooth(330.0f, 365.0f, t)', 'smooth(210.0f, 235.0f, t)')
           attack.write_text(text)
 
-          # El golpe/destruccion cae cerca del final hablado del audio.
           server = Path('src/main/java/igy/purpure/server/PurpureServerEvents.java')
           text = server.read_text()
-          if 'private static final int IMPACT = 190;' not in text:
-              raise SystemExit('Could not find server impact timing')
-          text = text.replace('private static final int IMPACT = 190;', 'private static final int IMPACT = 300;', 1)
+
+          # El ArmorStand queda como marcador server-side invisible. Ya no se ve como maniqui.
+          if 'gojo.setSilent(true);' in text and 'gojo.setInvisible(true);' not in text:
+              text = text.replace(
+                  'gojo.setSilent(true);',
+                  'gojo.setSilent(true);\n            gojo.setInvisible(true);',
+                  1
+              )
+
+          # Quitamos la ropa/cabeza del ArmorStand invisible: la skin completa la renderiza el cliente.
+          for line in [
+              '            gojo.setItemSlot(EquipmentSlot.HEAD, createGojoHead());\n',
+              '            gojo.setItemSlot(EquipmentSlot.CHEST, blackLeather(Items.LEATHER_CHESTPLATE));\n',
+              '            gojo.setItemSlot(EquipmentSlot.LEGS, blackLeather(Items.LEATHER_LEGGINGS));\n',
+              '            gojo.setItemSlot(EquipmentSlot.FEET, blackLeather(Items.LEATHER_BOOTS));\n'
+          ]:
+              text = text.replace(line, '')
+
+          # Fuerza al objetivo a mirar directamente hacia Gojo durante toda la cinemática.
+          old = '                player.teleportTo(level, x, y, z, player.getYRot(), player.getXRot());'
+          new = '''                double lookDx = (x + 3.45) - x;
+                double lookDz = z - z;
+                double lookDy = (y + 1.62) - (y + 1.62);
+                double lookHorizontal = Math.sqrt(lookDx * lookDx + lookDz * lookDz);
+                float lookYaw = (float)Math.toDegrees(Math.atan2(-lookDx, lookDz));
+                float lookPitch = (float)-Math.toDegrees(Math.atan2(lookDy, lookHorizontal));
+                player.teleportTo(level, x, y, z, lookYaw, lookPitch);
+                player.setYHeadRot(lookYaw);
+                player.setYBodyRot(lookYaw);'''
+          if old not in text:
+              raise SystemExit('Could not find player freeze teleport line')
+          text = text.replace(old, new, 1)
+
+          # Mantiene el golpe en el timing del audio actual.
+          if 'private static final int IMPACT = 190;' in text:
+              text = text.replace('private static final int IMPACT = 190;', 'private static final int IMPACT = 300;', 1)
           server.write_text(text)
           PY
 
