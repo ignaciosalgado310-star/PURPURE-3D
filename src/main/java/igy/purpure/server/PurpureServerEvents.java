@@ -38,10 +38,11 @@ import java.util.UUID;
 public final class PurpureServerEvents {
     private static final Map<UUID, Ritual> ACTIVE = new HashMap<>();
 
-    private static final int IMPACT = 190;
+    private static final int IMPACT = 340;
     private static final int INTERVAL = 2;
+    private static final double GOJO_OFFSET_X = 4.0;
 
-    // Cabeza custom de Gojo. Solo se usa como textura del PLAYER_HEAD del NPC.
+    // Cabeza de Gojo para que el NPC siempre sea visible sin depender de un renderer cliente.
     private static final String GOJO_HEAD_TEXTURE =
             "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvNDcxY2JkNjZjNzBhYmEyMDU0NzI3ZTc0YmJjODg4NzcxYmFhNzgwZDdmMmJmMTE0MzNlYzY4YjZiZjUxNmZkMiJ9fX0=";
 
@@ -146,7 +147,7 @@ public final class PurpureServerEvents {
 
     private static ItemStack blackLeather(Item item) {
         ItemStack stack = new ItemStack(item);
-        stack.getOrCreateTagElement("display").putInt("color", 0x080A12);
+        stack.getOrCreateTagElement("display").putInt("color", 0x050711);
         return stack;
     }
 
@@ -185,49 +186,67 @@ public final class PurpureServerEvents {
         void spawnGojo() {
             if (gojo != null && gojo.isAlive()) return;
 
-            gojo = new ArmorStand(level, x + 3.45, y, z);
+            gojo = new ArmorStand(level, x + GOJO_OFFSET_X, y, z);
             gojo.setNoGravity(true);
             gojo.setInvulnerable(true);
             gojo.setSilent(true);
+            gojo.setInvisible(false);
             gojo.setShowArms(true);
             gojo.setNoBasePlate(true);
             gojo.setCustomName(Component.literal("§f§lGojo Satoru"));
             gojo.setCustomNameVisible(false);
+
+            // +X desde el jugador; yaw 90 mira hacia -X, o sea hacia el objetivo.
             gojo.setYRot(90.0f);
+            gojo.setYHeadRot(90.0f);
 
             gojo.setItemSlot(EquipmentSlot.HEAD, createGojoHead());
             gojo.setItemSlot(EquipmentSlot.CHEST, blackLeather(Items.LEATHER_CHESTPLATE));
             gojo.setItemSlot(EquipmentSlot.LEGS, blackLeather(Items.LEATHER_LEGGINGS));
             gojo.setItemSlot(EquipmentSlot.FEET, blackLeather(Items.LEATHER_BOOTS));
 
-            gojo.setHeadPose(new Rotations(-4.0f, 0.0f, 0.0f));
-            gojo.setRightArmPose(new Rotations(3.0f, 0.0f, 8.0f));
-            gojo.setLeftArmPose(new Rotations(-3.0f, 0.0f, -8.0f));
+            gojo.setHeadPose(new Rotations(-5.0f, 0.0f, 0.0f));
+            gojo.setBodyPose(new Rotations(0.0f, 0.0f, 0.0f));
+            gojo.setRightArmPose(new Rotations(5.0f, 0.0f, 8.0f));
+            gojo.setLeftArmPose(new Rotations(-4.0f, 0.0f, -8.0f));
+            gojo.setRightLegPose(new Rotations(1.5f, 0.0f, 1.5f));
+            gojo.setLeftLegPose(new Rotations(-1.5f, 0.0f, -1.5f));
+
             level.addFreshEntity(gojo);
         }
 
         int end() {
-            return Math.max(330, IMPACT + hits * INTERVAL + 90);
+            return Math.max(390, IMPACT + hits * INTERVAL + 25);
         }
 
         void tick(ServerPlayer player) {
             t++;
 
-            if (gojo == null || !gojo.isAlive()) {
-                spawnGojo();
-            }
+            if (gojo == null || !gojo.isAlive()) spawnGojo();
             animateGojo();
 
             if (t < end()) {
-                player.teleportTo(level, x, y, z, player.getYRot(), player.getXRot());
+                // El jugador queda quieto mirando DIRECTAMENTE a Gojo.
+                double gx = x + GOJO_OFFSET_X;
+                double gy = y + 1.55;
+                double gz = z;
+                double eyeY = y + 1.62;
+                double dx = gx - x;
+                double dz = gz - z;
+                double dy = gy - eyeY;
+                double horizontal = Math.sqrt(dx * dx + dz * dz);
+                float yaw = (float)Math.toDegrees(Math.atan2(-dx, dz));
+                float pitch = (float)-Math.toDegrees(Math.atan2(dy, horizontal));
+
+                player.teleportTo(level, x, y, z, yaw, pitch);
+                player.setYHeadRot(yaw);
+                player.setYBodyRot(yaw);
                 player.setDeltaMovement(0.0, 0.0, 0.0);
                 player.fallDistance = 0.0f;
                 player.hurtMarked = true;
             }
 
-            if (t == IMPACT) {
-                queueCrater(player.blockPosition());
-            }
+            if (t == IMPACT) queueCrater(player.blockPosition());
 
             if (t >= IMPACT && completedHits < hits) {
                 int due = Math.min(hits, ((t - IMPACT) / INTERVAL) + 1);
@@ -250,56 +269,58 @@ public final class PurpureServerEvents {
         void animateGojo() {
             if (gojo == null || !gojo.isAlive()) return;
 
-            // Lo mantenemos siempre en el mismo sitio para que sea una aparicion cinematografica.
-            gojo.teleportTo(x + 3.45, y, z);
-            gojo.setYRot(90.0f + (float)Math.sin(t * 0.045) * 2.0f);
+            gojo.teleportTo(x + GOJO_OFFSET_X, y, z);
+            float sway = (float)Math.sin(t * 0.045) * 2.2f;
+            gojo.setYRot(90.0f + sway);
+            gojo.setYHeadRot(90.0f + sway * 0.55f);
 
-            float rightX;
-            float rightY;
-            float rightZ;
-            float leftX;
-            float leftY;
-            float leftZ;
+            float rightX, rightY, rightZ;
+            float leftX, leftY, leftZ;
 
-            if (t < 55) {
-                float q = smooth(5.0f, 55.0f, t);
-                rightX = lerp(q, 3.0f, -52.0f);
-                rightY = lerp(q, 0.0f, -18.0f);
-                rightZ = lerp(q, 8.0f, -28.0f);
-                leftX = lerp(q, -3.0f, -48.0f);
-                leftY = lerp(q, 0.0f, 18.0f);
-                leftZ = lerp(q, -8.0f, 28.0f);
-            } else if (t < 125) {
-                float q = smooth(55.0f, 115.0f, t);
-                rightX = lerp(q, -52.0f, -78.0f);
-                rightY = lerp(q, -18.0f, -34.0f);
-                rightZ = lerp(q, -28.0f, -17.0f);
-                leftX = lerp(q, -48.0f, -78.0f);
-                leftY = lerp(q, 18.0f, 34.0f);
-                leftZ = lerp(q, 28.0f, 17.0f);
-            } else if (t < 185) {
-                float q = smooth(125.0f, 175.0f, t);
-                rightX = lerp(q, -78.0f, -96.0f);
-                rightY = lerp(q, -34.0f, -5.0f);
-                rightZ = lerp(q, -17.0f, -4.0f);
-                leftX = lerp(q, -78.0f, -96.0f);
-                leftY = lerp(q, 34.0f, 5.0f);
-                leftZ = lerp(q, 17.0f, 4.0f);
+            if (t < 82) {
+                float q = smooth(8.0f, 76.0f, t);
+                rightX = lerp(q, 5.0f, -48.0f);
+                rightY = lerp(q, 0.0f, -20.0f);
+                rightZ = lerp(q, 8.0f, -25.0f);
+                leftX = lerp(q, -4.0f, -44.0f);
+                leftY = lerp(q, 0.0f, 20.0f);
+                leftZ = lerp(q, -8.0f, 25.0f);
+            } else if (t < 220) {
+                float q = smooth(82.0f, 205.0f, t);
+                rightX = lerp(q, -48.0f, -74.0f);
+                rightY = lerp(q, -20.0f, -36.0f);
+                rightZ = lerp(q, -25.0f, -18.0f);
+                leftX = lerp(q, -44.0f, -74.0f);
+                leftY = lerp(q, 20.0f, 36.0f);
+                leftZ = lerp(q, 25.0f, 18.0f);
+            } else if (t < 275) {
+                // Fusion: manos juntas poco a poco.
+                float q = smooth(220.0f, 265.0f, t);
+                rightX = lerp(q, -74.0f, -98.0f);
+                rightY = lerp(q, -36.0f, -6.0f);
+                rightZ = lerp(q, -18.0f, -4.0f);
+                leftX = lerp(q, -74.0f, -98.0f);
+                leftY = lerp(q, 36.0f, 6.0f);
+                leftZ = lerp(q, 18.0f, 4.0f);
             } else {
-                float q = smooth(185.0f, 235.0f, t);
-                // Lanzamiento: brazo derecho al frente y el izquierdo baja.
-                rightX = lerp(q, -96.0f, -88.0f);
-                rightY = lerp(q, -5.0f, 0.0f);
+                // Lanzamiento: brazo derecho apunta al jugador y el izquierdo baja.
+                float q = smooth(275.0f, 330.0f, t);
+                rightX = lerp(q, -98.0f, -88.0f);
+                rightY = lerp(q, -6.0f, 0.0f);
                 rightZ = lerp(q, -4.0f, 0.0f);
-                leftX = lerp(q, -96.0f, -25.0f);
-                leftY = lerp(q, 5.0f, 10.0f);
+                leftX = lerp(q, -98.0f, -24.0f);
+                leftY = lerp(q, 6.0f, 10.0f);
                 leftZ = lerp(q, 4.0f, 12.0f);
             }
 
-            float breathe = (float)Math.sin(t * 0.12) * 2.0f;
+            float breathe = (float)Math.sin(t * 0.11) * 2.0f;
+            float body = (float)Math.sin(t * 0.052) * 2.2f;
             gojo.setRightArmPose(new Rotations(rightX + breathe, rightY, rightZ));
             gojo.setLeftArmPose(new Rotations(leftX - breathe, leftY, leftZ));
-            gojo.setHeadPose(new Rotations(-4.0f + (float)Math.sin(t * 0.055) * 2.0f, 0.0f, 0.0f));
+            gojo.setHeadPose(new Rotations(-5.0f + (float)Math.sin(t * 0.055) * 2.2f, -body * 0.4f, 0.0f));
+            gojo.setBodyPose(new Rotations(-1.5f + body * 0.18f, body, 0.0f));
+            gojo.setRightLegPose(new Rotations(2.0f + breathe * 0.20f, 0.0f, 1.8f));
+            gojo.setLeftLegPose(new Rotations(-2.0f - breathe * 0.18f, 0.0f, -1.8f));
         }
 
         void cleanup() {
@@ -311,7 +332,7 @@ public final class PurpureServerEvents {
 
         void hit(ServerPlayer player) {
             if (consumeTotem(player)) {
-                level.broadcastEntityEvent(player, (byte) 35);
+                level.broadcastEntityEvent(player, (byte)35);
             } else {
                 player.hurt(player.damageSources().magic(), 1000.0f);
             }
