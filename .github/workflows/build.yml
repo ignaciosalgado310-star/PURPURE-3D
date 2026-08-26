@@ -32,9 +32,18 @@ jobs:
           cat src/main/resources/assets/purpure/sounds/hollow_purple_video.0*.b64 > /tmp/hollow_purple_video.b64
           base64 -d /tmp/hollow_purple_video.b64 > src/main/resources/assets/purpure/sounds/hollow_purple_video.ogg
 
-          # Frase de invocacion extraida del video original. Se guarda en partes
-          # de Base64 para que GitHub preserve exactamente todos los bytes del OGG.
-          cat src/main/resources/assets/purpure/sounds/hollow_purple_invoke.0*.b64 > /tmp/hollow_purple_invoke.b64
+          # Frase de invocacion limpia extraida del video original.
+          # Las partes se concatenan explicitamente para impedir que un payload viejo
+          # entre accidentalmente en el OGG final.
+          cat \
+            src/main/resources/assets/purpure/sounds/hollow_purple_invoke.00.b64 \
+            src/main/resources/assets/purpure/sounds/hollow_purple_invoke.01.b64 \
+            src/main/resources/assets/purpure/sounds/hollow_purple_invoke.02.b64 \
+            src/main/resources/assets/purpure/sounds/hollow_purple_invoke.03a.b64 \
+            src/main/resources/assets/purpure/sounds/hollow_purple_invoke.03b.b64 \
+            src/main/resources/assets/purpure/sounds/hollow_purple_invoke.04.b64 \
+            src/main/resources/assets/purpure/sounds/hollow_purple_invoke.05.b64 \
+            > /tmp/hollow_purple_invoke.b64
           base64 -d /tmp/hollow_purple_invoke.b64 > src/main/resources/assets/purpure/sounds/hollow_purple_invoke.ogg
 
           # Skin completa de Gojo.
@@ -66,11 +75,14 @@ jobs:
           test -s src/main/resources/assets/purpure/textures/entity/gojo_skin.png
           echo "Invocation SHA256:"
           sha256sum src/main/resources/assets/purpure/sounds/hollow_purple_invoke.ogg
-          test "$(sha256sum src/main/resources/assets/purpure/sounds/hollow_purple_invoke.ogg | cut -d' ' -f1)" = "880c5caaebd148ff43c0764c67bfa6f391dc22274c9e997e19bc6e26ca8a3309"
+          test "$(sha256sum src/main/resources/assets/purpure/sounds/hollow_purple_invoke.ogg | cut -d' ' -f1)" = "4adeced1d7398a4cbb26fd7c29b14416f5388c90e633ad5a921c2aa7d1310e7e"
           file src/main/resources/assets/purpure/sounds/hollow_purple_invoke.ogg
           sudo apt-get update -qq
           sudo apt-get install -y -qq ffmpeg >/dev/null
           ffprobe -v error -show_entries format=duration -of default=nw=1:nk=1 src/main/resources/assets/purpure/sounds/hollow_purple_invoke.ogg
+          ffmpeg -v error -i src/main/resources/assets/purpure/sounds/hollow_purple_invoke.ogg -f null - 2> /tmp/invoke_decode.err
+          cat /tmp/invoke_decode.err
+          test ! -s /tmp/invoke_decode.err
 
       - name: Build Forge mod
         run: gradle clean build --stacktrace
