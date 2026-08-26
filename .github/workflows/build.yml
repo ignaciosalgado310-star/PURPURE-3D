@@ -28,13 +28,14 @@ jobs:
 
       - name: Prepare PURPURE 3D V13
         run: |
-          # Conserva el audio largo/original que ya tenia PURPURE.
+          # Audio largo/original que ya tenia PURPURE.
           cat src/main/resources/assets/purpure/sounds/hollow_purple_video.0*.b64 > /tmp/hollow_purple_video.b64
           base64 -d /tmp/hollow_purple_video.b64 > src/main/resources/assets/purpure/sounds/hollow_purple_video.ogg
 
-          # La frase de invocacion ya esta guardada como OGG real y valido,
-          # extraida del video de referencia original del usuario.
-          test -s src/main/resources/assets/purpure/sounds/hollow_purple_invoke.ogg
+          # Frase de invocacion extraida del video original. Se guarda en partes
+          # de Base64 para que GitHub preserve exactamente todos los bytes del OGG.
+          cat src/main/resources/assets/purpure/sounds/hollow_purple_invoke.0*.b64 > /tmp/hollow_purple_invoke.b64
+          base64 -d /tmp/hollow_purple_invoke.b64 > src/main/resources/assets/purpure/sounds/hollow_purple_invoke.ogg
 
           # Skin completa de Gojo.
           base64 -d src/main/resources/assets/purpure/textures/entity/gojo_skin.b64 > src/main/resources/assets/purpure/textures/entity/gojo_skin.png
@@ -46,9 +47,10 @@ jobs:
           sed -i 's/gojo.setItemSlot(EquipmentSlot.LEGS, blackLeather(Items.LEATHER_LEGGINGS));/gojo.setItemSlot(EquipmentSlot.LEGS, ItemStack.EMPTY);/' src/main/java/igy/purpure/server/PurpureServerEvents.java
           sed -i 's/gojo.setItemSlot(EquipmentSlot.FEET, blackLeather(Items.LEATHER_BOOTS));/gojo.setItemSlot(EquipmentSlot.FEET, ItemStack.EMPTY);/' src/main/java/igy/purpure/server/PurpureServerEvents.java
 
-          # No empaquetar las fuentes base64 historicas.
+          # No empaquetar fuentes Base64.
           rm -f src/main/resources/assets/purpure/sounds/hollow_purple_video.b64
           rm -f src/main/resources/assets/purpure/sounds/hollow_purple_video.0*.b64
+          rm -f src/main/resources/assets/purpure/sounds/hollow_purple_invoke.0*.b64
           rm -f src/main/resources/assets/purpure/textures/entity/gojo_skin.b64
 
           # Renderers experimentales viejos.
@@ -62,8 +64,10 @@ jobs:
           test -s src/main/resources/assets/purpure/sounds/hollow_purple_video.ogg
           test -s src/main/resources/assets/purpure/sounds/hollow_purple_invoke.ogg
           test -s src/main/resources/assets/purpure/textures/entity/gojo_skin.png
+          echo "Invocation SHA256:"
+          sha256sum src/main/resources/assets/purpure/sounds/hollow_purple_invoke.ogg
+          test "$(sha256sum src/main/resources/assets/purpure/sounds/hollow_purple_invoke.ogg | cut -d' ' -f1)" = "def306804d0a8d2026bf26477872b1e97dd845638c21ccd251dc903041335e42"
           file src/main/resources/assets/purpure/sounds/hollow_purple_invoke.ogg
-          file src/main/resources/assets/purpure/textures/entity/gojo_skin.png
           sudo apt-get update -qq
           sudo apt-get install -y -qq ffmpeg >/dev/null
           ffprobe -v error -show_entries format=duration -of default=nw=1:nk=1 src/main/resources/assets/purpure/sounds/hollow_purple_invoke.ogg
