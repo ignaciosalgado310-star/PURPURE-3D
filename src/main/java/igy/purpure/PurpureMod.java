@@ -23,6 +23,12 @@ public final class PurpureMod {
                     () -> SoundEvent.createVariableRangeEvent(new ResourceLocation(MODID, "hollow_purple_video"))
             );
 
+    public static final RegistryObject<SoundEvent> HOLLOW_PURPLE_INVOKE =
+            SOUND_EVENTS.register(
+                    "hollow_purple_invoke",
+                    () -> SoundEvent.createVariableRangeEvent(new ResourceLocation(MODID, "hollow_purple_invoke"))
+            );
+
     public PurpureMod() {
         IEventBus modBus = FMLJavaModLoadingContext.get().getModEventBus();
         SOUND_EVENTS.register(modBus);
