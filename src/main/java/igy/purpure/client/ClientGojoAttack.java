@@ -13,7 +13,6 @@ import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.client.renderer.GameRenderer;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.client.event.RenderLevelStageEvent;
@@ -22,16 +21,13 @@ import net.minecraftforge.fml.common.Mod;
 import org.joml.Matrix4f;
 
 /**
- * V10 visual-only upgrade.
- * Keeps the exact V9 sequence/timing/positions and only improves client-side
- * geometry/materials: textured relief spheres, layered translucent shells,
- * per-vertex fake lighting and denser 3D meshes.
+ * V11 - anime visual pass.
+ * Visual-only: keeps V9/V10 timing, positions, command, damage and totem logic.
+ * No particles: all energy is procedural 3D geometry.
  */
 @Mod.EventBusSubscriber(modid = PurpureMod.MODID, value = Dist.CLIENT, bus = Mod.EventBusSubscriber.Bus.FORGE)
 public final class ClientGojoAttack {
     private static final float TAU = (float) (Math.PI * 2.0);
-    private static final ResourceLocation ENERGY_TEXTURE =
-            new ResourceLocation(PurpureMod.MODID, "textures/effect/energy_surface.png");
 
     private static final float GOJO_X = 4.0f;
     private static final float FUSION_X = 2.65f;
@@ -76,6 +72,7 @@ public final class ClientGojoAttack {
     }
 
     private static void drawAttack(PoseStack pose, float t) {
+        // AZUL + ROJO: conservan exactamente el recorrido y momento de contacto.
         if (t < ORBS_END_TICK) {
             float appear = smooth(10.0f, 34.0f, t);
             float converge = smooth(38.0f, CONTACT_TICK, t);
@@ -96,26 +93,27 @@ public final class ClientGojoAttack {
                     centerY + yWobble,
                     -separation,
                     size,
-                    0.025f, 0.24f, 1.00f
+                    0.018f, 0.17f, 1.00f
             );
             Orb red = new Orb(
                     centerX - xWobble,
                     centerY - yWobble,
                     separation,
                     size,
-                    1.00f, 0.018f, 0.040f
+                    1.00f, 0.018f, 0.045f
             );
 
-            drawOrb(pose, blue, t, 0.0f);
-            drawOrb(pose, red, t, 173.0f);
+            drawOrb(pose, blue, t, 0.0f, true);
+            drawOrb(pose, red, t, 2.35f, false);
 
             if (t >= 144.0f) {
                 float q = smooth(144.0f, CONTACT_TICK, t)
                         * (1.0f - smooth(160.0f, ORBS_END_TICK, t));
-                drawFusionWeb(pose, blue, red, t, q);
+                drawFusion(pose, blue, red, t, q);
             }
         }
 
+        // HOLLOW PURPLE: nace solamente despues del contacto, igual que antes.
         if (t >= PURPLE_BIRTH_TICK) {
             float born = smooth(PURPLE_BIRTH_TICK, 170.0f, t);
             float grow = smooth(168.0f, PURPLE_GROW_END, t);
@@ -134,201 +132,245 @@ public final class ClientGojoAttack {
 
             pose.pushPose();
             pose.translate(px, py, 0.0f);
-            purple(pose, radius, t);
+            drawPurple(pose, radius, t);
             pose.popPose();
         }
     }
 
-    private static void drawOrb(PoseStack pose, Orb o, float t, float phase) {
+    private static void drawOrb(PoseStack pose, Orb o, float t, float phase, boolean blue) {
         if (o.size <= 0.02f) return;
 
         pose.pushPose();
         pose.translate(o.x, o.y, o.z);
 
-        pose.pushPose();
-        pose.mulPose(Axis.YP.rotationDegrees(t * 0.82f + phase));
-        pose.mulPose(Axis.XP.rotationDegrees(Mth.sin(t * 0.025f + phase) * 7.0f));
-        texturedSphere(pose, o.size, o.r, o.g, o.b, 1.0f,
-                t * 0.0025f, 0.0f, 0.025f, false);
-        pose.popPose();
+        // Cuerpo limpio y saturado, mas cercano a la animacion que una textura rocosa.
+        animeSphere(pose, o.size, o.r, o.g, o.b, 1.0f, t * 0.055f + phase, false, 0.06f);
 
-        float cr = Mth.clamp(o.r * 1.18f + 0.030f, 0.0f, 1.0f);
-        float cg = Mth.clamp(o.g * 1.18f + 0.030f, 0.0f, 1.0f);
-        float cb = Mth.clamp(o.b * 1.10f + 0.022f, 0.0f, 1.0f);
+        float ir = blue ? 0.16f : 1.00f;
+        float ig = blue ? 0.56f : 0.16f;
+        float ib = blue ? 1.00f : 0.20f;
+        animeSphere(pose, o.size * 0.57f, ir, ig, ib, 0.98f,
+                -t * 0.075f + phase, false, 0.035f);
 
-        pose.pushPose();
-        pose.mulPose(Axis.ZP.rotationDegrees(-t * 0.58f - phase));
-        texturedSphere(pose, o.size * 0.70f, cr, cg, cb, 0.98f,
-                -t * 0.0032f, 0.11f, 0.018f, false);
-        pose.popPose();
+        // Halo volumetrico: geometria 3D aditiva, no particulas.
+        animeSphere(pose, o.size * 1.055f,
+                Mth.clamp(o.r * 1.18f + 0.02f, 0.0f, 1.0f),
+                Mth.clamp(o.g * 1.20f + 0.03f, 0.0f, 1.0f),
+                Mth.clamp(o.b * 1.10f + 0.02f, 0.0f, 1.0f),
+                0.18f, t * 0.11f + phase, true, 0.03f);
+        animeSphere(pose, o.size * 1.11f, o.r, o.g, o.b,
+                0.055f, -t * 0.08f + phase, true, 0.015f);
 
-        pose.pushPose();
-        pose.mulPose(Axis.YP.rotationDegrees(-t * 0.65f + phase * 0.35f));
-        texturedSphere(
-                pose,
-                o.size * 1.055f,
-                Mth.clamp(o.r * 1.14f + 0.03f, 0.0f, 1.0f),
-                Mth.clamp(o.g * 1.14f + 0.03f, 0.0f, 1.0f),
-                Mth.clamp(o.b * 1.08f + 0.02f, 0.0f, 1.0f),
-                0.17f,
-                t * 0.0041f, 0.19f, 0.040f, true
-        );
-        pose.popPose();
-
-        texturedSphere(pose, o.size * 1.12f, o.r, o.g, o.b, 0.065f,
-                -t * 0.0017f, 0.31f, 0.015f, true);
-
+        // Trazos curvos incompletos; evitan el aspecto de aros completos.
+        drawOrbArcs(pose, o.size, o.r, o.g, o.b, t, phase);
         pose.popPose();
     }
 
-    private static void drawFusionWeb(PoseStack pose, Orb blue, Orb red, float t, float q) {
+    private static void drawOrbArcs(PoseStack pose, float radius,
+                                    float r, float g, float b, float t, float phase) {
+        pose.pushPose();
+        pose.mulPose(Axis.XP.rotationDegrees(32.0f));
+        pose.mulPose(Axis.ZP.rotationDegrees(t * 0.72f + phase * 18.0f));
+        surfaceArc(pose, radius * 1.075f, 0.035f, 1.55f, 0.22f + phase,
+                r, g, b, 0.22f, t * 0.030f);
+        pose.popPose();
+
+        pose.pushPose();
+        pose.mulPose(Axis.YP.rotationDegrees(-48.0f));
+        pose.mulPose(Axis.XP.rotationDegrees(-t * 0.51f + phase * 24.0f));
+        surfaceArc(pose, radius * 1.09f, 0.026f, 1.18f, 2.55f + phase,
+                Mth.clamp(r + 0.16f, 0.0f, 1.0f),
+                Mth.clamp(g + 0.16f, 0.0f, 1.0f),
+                Mth.clamp(b + 0.12f, 0.0f, 1.0f),
+                0.16f, -t * 0.024f);
+        pose.popPose();
+
+        pose.pushPose();
+        pose.mulPose(Axis.ZP.rotationDegrees(61.0f));
+        pose.mulPose(Axis.YP.rotationDegrees(t * 0.43f - phase * 31.0f));
+        surfaceArc(pose, radius * 1.065f, 0.022f, 0.92f, 4.15f + phase,
+                r, g, b, 0.13f, t * 0.018f);
+        pose.popPose();
+    }
+
+    private static void drawFusion(PoseStack pose, Orb blue, Orb red, float t, float q) {
         if (q <= 0.01f) return;
 
-        for (int strand = 0; strand < 6; strand++) {
-            float phase = strand * 1.07f + t * 0.115f;
+        // Filamentos azul -> violeta -> rojo alrededor del punto donde chocan.
+        for (int strand = 0; strand < 8; strand++) {
+            float phase = strand * 0.82f + t * 0.12f;
             float px = blue.x;
             float py = blue.y;
             float pz = blue.z;
 
-            for (int i = 1; i <= 14; i++) {
-                float u = i / 14.0f;
+            for (int i = 1; i <= 16; i++) {
+                float u = i / 16.0f;
                 float bulge = Mth.sin(u * Mth.PI) * q;
                 float x = Mth.lerp(u, blue.x, red.x)
-                        + Mth.cos(phase + u * TAU * 1.5f) * 0.13f * bulge;
+                        + Mth.cos(phase + u * TAU * 1.35f) * 0.14f * bulge;
                 float y = Mth.lerp(u, blue.y, red.y)
-                        + Mth.sin(phase * 0.72f + u * TAU) * 0.105f * bulge;
+                        + Mth.sin(phase * 0.74f + u * TAU * 1.10f) * 0.115f * bulge;
                 float z = Mth.lerp(u, blue.z, red.z)
-                        + Mth.sin(phase + u * TAU * 1.25f) * 0.13f * bulge;
-                float center = 1.0f - Math.abs(u * 2.0f - 1.0f);
+                        + Mth.sin(phase + u * TAU * 1.45f) * 0.14f * bulge;
 
-                ribbon(
-                        pose,
-                        px, py, pz,
-                        x, y, z,
-                        Mth.lerp(center, 0.12f, 0.73f),
-                        0.035f,
-                        1.0f,
-                        0.075f * q,
-                        0.018f + 0.026f * center
-                );
+                float cr;
+                float cg;
+                float cb;
+                if (u < 0.5f) {
+                    float k = u * 2.0f;
+                    cr = Mth.lerp(k, 0.05f, 0.72f);
+                    cg = Mth.lerp(k, 0.30f, 0.05f);
+                    cb = Mth.lerp(k, 1.00f, 1.00f);
+                } else {
+                    float k = (u - 0.5f) * 2.0f;
+                    cr = Mth.lerp(k, 0.72f, 1.00f);
+                    cg = Mth.lerp(k, 0.05f, 0.025f);
+                    cb = Mth.lerp(k, 1.00f, 0.08f);
+                }
+
+                float center = 1.0f - Math.abs(u * 2.0f - 1.0f);
+                ribbon(pose, px, py, pz, x, y, z,
+                        cr, cg, cb,
+                        (0.055f + center * 0.055f) * q,
+                        0.014f + center * 0.029f);
                 px = x;
                 py = y;
                 pz = z;
             }
         }
+
+        // Punto de fusion violeta corto y concentrado.
+        float mx = (blue.x + red.x) * 0.5f;
+        float my = (blue.y + red.y) * 0.5f;
+        float mz = (blue.z + red.z) * 0.5f;
+        pose.pushPose();
+        pose.translate(mx, my, mz);
+        animeSphere(pose, 0.09f + q * 0.28f, 0.67f, 0.035f, 1.0f,
+                0.72f * q, t * 0.18f, true, 0.05f);
+        pose.popPose();
     }
 
-    private static void purple(PoseStack pose, float r, float t) {
+    private static void drawPurple(PoseStack pose, float r, float t) {
         if (r <= 0.04f) return;
 
-        pose.pushPose();
-        pose.mulPose(Axis.YP.rotationDegrees(t * 0.30f));
-        pose.mulPose(Axis.XP.rotationDegrees(-10.0f + Mth.sin(t * 0.018f) * 5.0f));
-        texturedSphere(pose, r, 0.43f, 0.018f, 0.90f, 1.0f,
-                t * 0.0016f, 0.0f, 0.030f, false);
-        pose.popPose();
+        // Nucleo oscuro-violeta y volumen luminoso, inspirado en el look limpio del anime.
+        animeSphere(pose, r, 0.34f, 0.008f, 0.70f, 1.0f,
+                t * 0.040f, false, 0.055f);
+        animeSphere(pose, r * 0.74f, 0.66f, 0.035f, 1.00f, 0.98f,
+                -t * 0.065f, false, 0.035f);
+        animeSphere(pose, r * 0.39f, 0.82f, 0.16f, 1.00f, 0.96f,
+                t * 0.085f, false, 0.022f);
+        animeSphere(pose, r * 0.15f, 0.96f, 0.58f, 1.00f, 0.96f,
+                -t * 0.11f, false, 0.012f);
 
-        pose.pushPose();
-        pose.mulPose(Axis.ZP.rotationDegrees(-t * 0.24f));
-        texturedSphere(pose, r * 0.73f, 0.67f, 0.055f, 1.00f, 1.0f,
-                -t * 0.0024f, 0.14f, 0.022f, false);
-        pose.popPose();
+        // Capas de energia translucida alrededor de Purple.
+        animeSphere(pose, r * 1.022f, 0.76f, 0.055f, 1.00f, 0.19f,
+                -t * 0.078f, true, 0.045f);
+        animeSphere(pose, r * 1.060f, 0.60f, 0.018f, 1.00f, 0.105f,
+                t * 0.058f, true, 0.025f);
+        animeSphere(pose, r * 1.095f, 0.31f, 0.015f, 0.92f, 0.045f,
+                -t * 0.037f, true, 0.012f);
 
-        pose.pushPose();
-        pose.mulPose(Axis.YP.rotationDegrees(-t * 0.46f));
-        pose.mulPose(Axis.ZP.rotationDegrees(17.0f));
-        texturedSphere(pose, r * 1.018f, 0.78f, 0.085f, 1.00f, 0.18f,
-                t * 0.0040f, 0.26f, 0.052f, true);
-        pose.popPose();
-
-        texturedSphere(pose, r * 1.065f, 0.82f, 0.09f, 1.00f, 0.115f,
-                -t * 0.0012f, 0.34f, 0.018f, true);
-        texturedSphere(pose, r * 1.105f, 0.34f, 0.04f, 1.00f, 0.050f,
-                t * 0.0009f, 0.48f, 0.010f, true);
-        texturedSphere(pose, r * 0.17f, 0.88f, 0.30f, 1.00f, 1.0f,
-                t * 0.0048f, 0.52f, 0.015f, false);
+        drawPurpleArcs(pose, r, t);
     }
 
-    private static void texturedSphere(
-            PoseStack pose,
-            float radius,
-            float r, float g, float b,
-            float alpha,
-            float uShift,
-            float vShift,
-            float relief,
-            boolean glow
-    ) {
+    private static void drawPurpleArcs(PoseStack pose, float r, float t) {
+        // Violetas principales.
+        for (int i = 0; i < 5; i++) {
+            pose.pushPose();
+            pose.mulPose(Axis.XP.rotationDegrees(18.0f + i * 29.0f));
+            pose.mulPose(Axis.YP.rotationDegrees(-26.0f + i * 41.0f));
+            pose.mulPose(Axis.ZP.rotationDegrees(t * (0.24f + i * 0.035f) + i * 53.0f));
+            surfaceArc(pose,
+                    r * (1.018f + i * 0.006f),
+                    Math.max(0.025f, r * 0.010f),
+                    0.82f + i * 0.11f,
+                    0.35f + i * 1.09f,
+                    0.82f, 0.09f, 1.0f,
+                    0.11f,
+                    t * (0.013f + i * 0.002f));
+            pose.popPose();
+        }
+
+        // Ecos azul y rojo de las dos tecnicas que se fusionaron; muy sutiles.
+        pose.pushPose();
+        pose.mulPose(Axis.YP.rotationDegrees(37.0f));
+        pose.mulPose(Axis.ZP.rotationDegrees(-t * 0.19f));
+        surfaceArc(pose, r * 1.028f, Math.max(0.020f, r * 0.008f),
+                0.72f, 2.0f, 0.08f, 0.28f, 1.0f, 0.075f, t * 0.015f);
+        pose.popPose();
+
+        pose.pushPose();
+        pose.mulPose(Axis.XP.rotationDegrees(-46.0f));
+        pose.mulPose(Axis.ZP.rotationDegrees(t * 0.17f));
+        surfaceArc(pose, r * 1.032f, Math.max(0.020f, r * 0.008f),
+                0.76f, 4.2f, 1.0f, 0.055f, 0.10f, 0.068f, -t * 0.014f);
+        pose.popPose();
+    }
+
+    private static void animeSphere(PoseStack pose,
+                                    float radius,
+                                    float r, float g, float b,
+                                    float alpha,
+                                    float phase,
+                                    boolean glow,
+                                    float surfaceEnergy) {
         if (radius <= 0.02f || alpha <= 0.005f) return;
 
-        if (glow) setTexturedGlow();
-        else setTexturedSolid();
+        if (glow) setGlow();
+        else setSolid();
 
         Matrix4f m = pose.last().pose();
         BufferBuilder bb = Tesselator.getInstance().getBuilder();
-        bb.begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_TEX_COLOR);
+        bb.begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_COLOR);
 
-        final int lon = glow ? 72 : 96;
-        final int lat = glow ? 40 : 54;
+        final int lon = glow ? 56 : 72;
+        final int lat = glow ? 32 : 40;
 
         for (int iy = 0; iy < lat; iy++) {
             float p0 = ((float) iy / lat - 0.5f) * Mth.PI;
             float p1 = ((float) (iy + 1) / lat - 0.5f) * Mth.PI;
-            float v0 = (float) iy / lat + vShift;
-            float v1 = (float) (iy + 1) / lat + vShift;
-
             for (int ix = 0; ix < lon; ix++) {
                 float a0 = ix * TAU / lon;
                 float a1 = (ix + 1) * TAU / lon;
-                float u0 = (float) ix / lon + uShift;
-                float u1 = (float) (ix + 1) / lon + uShift;
-
-                texturedVertex(bb, m, radius, p0, a0, u0, v0,
-                        r, g, b, alpha, relief, uShift);
-                texturedVertex(bb, m, radius, p0, a1, u1, v0,
-                        r, g, b, alpha, relief, uShift);
-                texturedVertex(bb, m, radius, p1, a1, u1, v1,
-                        r, g, b, alpha, relief, uShift);
-                texturedVertex(bb, m, radius, p1, a0, u0, v1,
-                        r, g, b, alpha, relief, uShift);
+                sphereVertex(bb, m, radius, p0, a0, r, g, b, alpha, phase, surfaceEnergy);
+                sphereVertex(bb, m, radius, p0, a1, r, g, b, alpha, phase, surfaceEnergy);
+                sphereVertex(bb, m, radius, p1, a1, r, g, b, alpha, phase, surfaceEnergy);
+                sphereVertex(bb, m, radius, p1, a0, r, g, b, alpha, phase, surfaceEnergy);
             }
         }
-
         BufferUploader.drawWithShader(bb.end());
     }
 
-    private static void texturedVertex(
-            BufferBuilder bb,
-            Matrix4f m,
-            float radius,
-            float lat,
-            float lon,
-            float u,
-            float v,
-            float r, float g, float b, float alpha,
-            float relief,
-            float phase
-    ) {
+    private static void sphereVertex(BufferBuilder bb,
+                                     Matrix4f m,
+                                     float radius,
+                                     float lat,
+                                     float lon,
+                                     float r, float g, float b, float alpha,
+                                     float phase,
+                                     float surfaceEnergy) {
         float c = Mth.cos(lat);
         float nx = c * Mth.cos(lon);
         float ny = Mth.sin(lat);
         float nz = c * Mth.sin(lon);
 
-        float polarFade = c * c;
-        float reliefWave =
-                Mth.sin(lon * 5.0f + lat * 3.0f + phase * 8.0f) * 0.58f
-                        + Mth.sin(lon * 13.0f - lat * 7.0f - phase * 5.0f) * 0.28f
-                        + Mth.sin(lon * 23.0f + lat * 11.0f + phase * 3.0f) * 0.14f;
-        float rr = radius * (1.0f + relief * polarFade * reliefWave);
+        // Ondulacion muy pequena: conserva esfera limpia pero evita aspecto plastico.
+        float wave = Mth.sin(lon * 5.0f + lat * 7.0f + phase) * 0.55f
+                + Mth.sin(lon * 11.0f - lat * 4.0f - phase * 0.65f) * 0.45f;
+        float rr = radius * (1.0f + surfaceEnergy * wave * 0.16f);
 
-        float directional = 0.76f + nx * 0.075f + ny * 0.135f - nz * 0.055f;
-        float highlightDir = Mth.clamp(nx * 0.28f + ny * 0.46f + nz * 0.66f, 0.0f, 1.0f);
-        float spec = highlightDir * highlightDir;
-        spec *= spec;
-        float shade = Mth.clamp(directional + spec * 0.34f, 0.54f, 1.16f);
+        // El jugador mira el ataque aproximadamente sobre el eje X; este rim crea
+        // la silueta brillante caracteristica del anime sin necesitar shader externo.
+        float rim = 1.0f - Math.abs(nx);
+        rim = rim * rim;
+        float highlight = Mth.clamp(-nx * 0.18f + ny * 0.35f - nz * 0.18f, 0.0f, 1.0f);
+        highlight *= highlight;
+        float energy = 0.5f + 0.5f * Mth.sin(lon * 4.0f + lat * 8.0f + phase);
+        float shade = 0.72f + rim * 0.24f + highlight * 0.20f + energy * surfaceEnergy * 0.45f;
+        shade = Mth.clamp(shade, 0.58f, 1.18f);
 
         bb.vertex(m, rr * nx, rr * ny, rr * nz)
-                .uv(u, v)
                 .color(
                         toColor(r * shade),
                         toColor(g * shade),
@@ -338,65 +380,80 @@ public final class ClientGojoAttack {
                 .endVertex();
     }
 
-    private static void ribbon(
-            PoseStack pose,
-            float x0, float y0, float z0,
-            float x1, float y1, float z1,
-            float r, float g, float b, float a, float w
-    ) {
-        if (a <= 0.005f) return;
+    private static void surfaceArc(PoseStack pose,
+                                   float radius,
+                                   float width,
+                                   float span,
+                                   float start,
+                                   float r, float g, float b, float alpha,
+                                   float phase) {
+        if (alpha <= 0.005f || radius <= 0.02f) return;
 
+        final int segments = 22;
+        float px = 0.0f;
+        float py = 0.0f;
+        float pz = 0.0f;
+        boolean have = false;
+
+        for (int i = 0; i <= segments; i++) {
+            float s = i / (float) segments;
+            float a = start + span * s + phase;
+            float rr = radius * (1.0f + Mth.sin(a * 3.0f + phase) * 0.018f);
+            float x = Mth.cos(a) * rr;
+            float y = Mth.sin(a) * rr;
+            float z = Mth.sin(s * Mth.PI) * radius * 0.075f * Mth.sin(phase + a * 0.7f);
+
+            if (have) {
+                float fade = Mth.sin(s * Mth.PI);
+                ribbon(pose, px, py, pz, x, y, z,
+                        r, g, b, alpha * (0.35f + fade * 0.65f), width);
+            }
+            px = x;
+            py = y;
+            pz = z;
+            have = true;
+        }
+    }
+
+    private static void ribbon(PoseStack pose,
+                               float x0, float y0, float z0,
+                               float x1, float y1, float z1,
+                               float r, float g, float b, float a, float w) {
+        if (a <= 0.005f) return;
         setGlow();
+
         Matrix4f m = pose.last().pose();
         BufferBuilder bb = Tesselator.getInstance().getBuilder();
         bb.begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_COLOR);
 
+        // Dos planos cruzados = filamento visible desde varios angulos y realmente 3D.
         vertex(bb, m, x0, y0 - w, z0, r, g, b, a);
         vertex(bb, m, x0, y0 + w, z0, r, g, b, a);
         vertex(bb, m, x1, y1 + w, z1, r, g, b, a);
         vertex(bb, m, x1, y1 - w, z1, r, g, b, a);
 
-        vertex(bb, m, x0 - w, y0, z0, r, g, b, a * 0.70f);
-        vertex(bb, m, x0 + w, y0, z0, r, g, b, a * 0.70f);
-        vertex(bb, m, x1 + w, y1, z1, r, g, b, a * 0.70f);
-        vertex(bb, m, x1 - w, y1, z1, r, g, b, a * 0.70f);
+        vertex(bb, m, x0, y0, z0 - w, r, g, b, a * 0.78f);
+        vertex(bb, m, x0, y0, z0 + w, r, g, b, a * 0.78f);
+        vertex(bb, m, x1, y1, z1 + w, r, g, b, a * 0.78f);
+        vertex(bb, m, x1, y1, z1 - w, r, g, b, a * 0.78f);
 
         BufferUploader.drawWithShader(bb.end());
     }
 
-    private static void vertex(
-            BufferBuilder bb,
-            Matrix4f m,
-            float x, float y, float z,
-            float r, float g, float b, float a
-    ) {
+    private static void vertex(BufferBuilder bb, Matrix4f m,
+                               float x, float y, float z,
+                               float r, float g, float b, float a) {
         bb.vertex(m, x, y, z)
                 .color(toColor(r), toColor(g), toColor(b), toColor(a))
                 .endVertex();
     }
 
-    private static void setTexturedSolid() {
+    private static void setSolid() {
         RenderSystem.enableDepthTest();
         RenderSystem.disableBlend();
         RenderSystem.depthMask(true);
         RenderSystem.disableCull();
-        RenderSystem.setShader(GameRenderer::getPositionTexColorShader);
-        RenderSystem.setShaderTexture(0, ENERGY_TEXTURE);
-    }
-
-    private static void setTexturedGlow() {
-        RenderSystem.enableDepthTest();
-        RenderSystem.enableBlend();
-        RenderSystem.blendFuncSeparate(
-                com.mojang.blaze3d.platform.GlStateManager.SourceFactor.SRC_ALPHA,
-                com.mojang.blaze3d.platform.GlStateManager.DestFactor.ONE,
-                com.mojang.blaze3d.platform.GlStateManager.SourceFactor.ONE,
-                com.mojang.blaze3d.platform.GlStateManager.DestFactor.ONE
-        );
-        RenderSystem.depthMask(false);
-        RenderSystem.disableCull();
-        RenderSystem.setShader(GameRenderer::getPositionTexColorShader);
-        RenderSystem.setShaderTexture(0, ENERGY_TEXTURE);
+        RenderSystem.setShader(GameRenderer::getPositionColorShader);
     }
 
     private static void setGlow() {
