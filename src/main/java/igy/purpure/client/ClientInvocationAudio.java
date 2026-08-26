@@ -15,12 +15,14 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
- * Reproduce la frase corta de invocacion justo cuando Hollow Purple empieza
- * a lanzarse. Solo audio cliente: no toca dano, totems ni logica del ritual.
+ * Frase original del video de referencia sincronizada con Hollow Purple.
+ * El clip empieza antes del lanzamiento para que, tras su pausa interna,
+ * la segunda parte de la invocacion caiga sobre LAUNCH_START (~tick 218).
+ * Solo audio cliente: no modifica dano, totems ni logica del ritual.
  */
 @Mod.EventBusSubscriber(modid = PurpureMod.MODID, value = Dist.CLIENT, bus = Mod.EventBusSubscriber.Bus.FORGE)
 public final class ClientInvocationAudio {
-    private static final float INVOKE_TICK = 218.0f;
+    private static final float INVOKE_TICK = 178.0f;
     private static final Set<UUID> PLAYED = new HashSet<>();
 
     private ClientInvocationAudio() {}
@@ -36,7 +38,6 @@ public final class ClientInvocationAudio {
         }
 
         Set<UUID> activeNow = new HashSet<>();
-
         for (AbstractClientPlayer target : mc.level.players()) {
             float t = ClientPurpureEffects.effectTick(target.getUUID());
             if (t < 0.0f) continue;
