@@ -26,28 +26,40 @@ jobs:
         with:
           gradle-version: '8.1.1'
 
-      - name: Prepare PURPURE 3D V9
+      - name: Prepare PURPURE 3D V12
         run: |
-          # Une las 7 partes del audio extraido del video de referencia y genera el OGG real.
+          # Reconstruye el audio original del anime que ya tenia PURPURE.
           cat src/main/resources/assets/purpure/sounds/hollow_purple_video.0*.b64 > /tmp/hollow_purple_video.b64
           base64 -d /tmp/hollow_purple_video.b64 > src/main/resources/assets/purpure/sounds/hollow_purple_video.ogg
 
-          # Evita que los .b64 terminen dentro del JAR.
+          # Reconstruye la skin completa de Gojo para el renderer cliente.
+          base64 -d src/main/resources/assets/purpure/textures/entity/gojo_skin.b64 > src/main/resources/assets/purpure/textures/entity/gojo_skin.png
+
+          # El ArmorStand queda solo como ancla logica; no debe verse detras de Gojo.
+          sed -i 's/gojo.setInvisible(false);/gojo.setInvisible(true);/' src/main/java/igy/purpure/server/PurpureServerEvents.java
+          sed -i 's/gojo.setItemSlot(EquipmentSlot.HEAD, createGojoHead());/gojo.setItemSlot(EquipmentSlot.HEAD, ItemStack.EMPTY);/' src/main/java/igy/purpure/server/PurpureServerEvents.java
+          sed -i 's/gojo.setItemSlot(EquipmentSlot.CHEST, blackLeather(Items.LEATHER_CHESTPLATE));/gojo.setItemSlot(EquipmentSlot.CHEST, ItemStack.EMPTY);/' src/main/java/igy/purpure/server/PurpureServerEvents.java
+          sed -i 's/gojo.setItemSlot(EquipmentSlot.LEGS, blackLeather(Items.LEATHER_LEGGINGS));/gojo.setItemSlot(EquipmentSlot.LEGS, ItemStack.EMPTY);/' src/main/java/igy/purpure/server/PurpureServerEvents.java
+          sed -i 's/gojo.setItemSlot(EquipmentSlot.FEET, blackLeather(Items.LEATHER_BOOTS));/gojo.setItemSlot(EquipmentSlot.FEET, ItemStack.EMPTY);/' src/main/java/igy/purpure/server/PurpureServerEvents.java
+
+          # No empaquetar fuentes base64 dentro del JAR.
           rm -f src/main/resources/assets/purpure/sounds/hollow_purple_video.b64
           rm -f src/main/resources/assets/purpure/sounds/hollow_purple_video.0*.b64
+          rm -f src/main/resources/assets/purpure/textures/entity/gojo_skin.b64
 
-          # Renderers experimentales anteriores: la version actual usa ClientGojoAttack.
+          # Renderers experimentales viejos; V12 usa ClientGojoAttack,
+          # ClientGojoSkinCaster y ClientAnimePolish.
           rm -f src/main/java/igy/purpure/client/ClientCasterAnimation.java
           rm -f src/main/java/igy/purpure/client/ClientEnergyEnhancements.java
           rm -f src/main/java/igy/purpure/client/ClientCinematicDirector.java
-          rm -f src/main/java/igy/purpure/client/ClientGojoSkinCaster.java
           rm -f src/main/java/igy/purpure/client/ClientGojoCaster.java
-          rm -f src/main/resources/assets/purpure/textures/entity/gojo_skin.b64
 
-      - name: Verify audio
+      - name: Verify audio and Gojo skin
         run: |
           test -s src/main/resources/assets/purpure/sounds/hollow_purple_video.ogg
+          test -s src/main/resources/assets/purpure/textures/entity/gojo_skin.png
           file src/main/resources/assets/purpure/sounds/hollow_purple_video.ogg
+          file src/main/resources/assets/purpure/textures/entity/gojo_skin.png
 
       - name: Build Forge mod
         run: gradle clean build --stacktrace
