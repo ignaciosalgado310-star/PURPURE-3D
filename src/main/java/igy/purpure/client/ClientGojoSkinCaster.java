@@ -21,13 +21,15 @@ import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 
 /**
- * V12: Gojo visual completo. El ArmorStand del servidor queda como ancla/logica,
- * mientras este renderer dibuja un PlayerModel con skin propia y animacion sincronizada.
+ * V15: conserva el Gojo visual de PURPURE-3D, pero lo hace protagonista:
+ * 1.68x, ojos Six Eyes reforzados en la skin, full-bright y anclado al punto
+ * original del ritual aunque el objetivo empiece a viajar con Hollow Purple.
  */
 @Mod.EventBusSubscriber(modid = PurpureMod.MODID, value = Dist.CLIENT, bus = Mod.EventBusSubscriber.Bus.FORGE)
 public final class ClientGojoSkinCaster {
     private static final ResourceLocation GOJO_SKIN =
             new ResourceLocation(PurpureMod.MODID, "textures/entity/gojo_skin.png");
+    private static final float GOJO_SCALE = 1.68f;
 
     private static PlayerModel<AbstractClientPlayer> model;
 
@@ -57,15 +59,20 @@ public final class ClientGojoSkinCaster {
 
     private static void renderGojo(Minecraft mc, PoseStack pose, Camera camera,
                                    AbstractClientPlayer target, float t) {
-        float alpha = smooth(0.0f, 12.0f, t);
+        float alpha = smooth(0.0f, 12.0f, t) * (1.0f - smooth(216.0f, 238.0f, t));
         if (alpha <= 0.01f) return;
+
+        double ox = ClientPurpureEffects.effectX(target.getUUID());
+        double oy = ClientPurpureEffects.effectY(target.getUUID());
+        double oz = ClientPurpureEffects.effectZ(target.getUUID());
+        if (Double.isNaN(ox) || Double.isNaN(oy) || Double.isNaN(oz)) return;
 
         resetModel();
         animateModel(t);
 
-        double gx = target.getX() + 4.0;
-        double gy = target.getY();
-        double gz = target.getZ();
+        double gx = ox + 4.0;
+        double gy = oy + 0.03;
+        double gz = oz;
 
         pose.pushPose();
         pose.translate(
@@ -74,9 +81,9 @@ public final class ClientGojoSkinCaster {
                 gz - camera.getPosition().z
         );
 
-        // Mira desde +X hacia el jugador en el origen, igual que el ritual del servidor.
+        // Mira desde +X hacia el punto donde comenzó el ritual.
         pose.mulPose(Axis.YP.rotationDegrees(90.0f));
-        pose.scale(-1.0f, -1.0f, 1.0f);
+        pose.scale(-GOJO_SCALE, -GOJO_SCALE, GOJO_SCALE);
         pose.translate(0.0f, -1.501f, 0.0f);
 
         MultiBufferSource.BufferSource buffers = mc.renderBuffers().bufferSource();
@@ -150,8 +157,8 @@ public final class ClientGojoSkinCaster {
             lx = lerp(q, -0.84f, -1.26f);
             ly = lerp(q, 0.52f, 0.72f);
             lz = lerp(q, 0.44f, 0.26f);
-        } else if (t < 220.0f) {
-            float q = smooth(150.0f, 210.0f, t);
+        } else if (t < 194.0f) {
+            float q = smooth(150.0f, 188.0f, t);
             rx = lerp(q, -1.26f, -1.68f);
             ry = lerp(q, -0.72f, -0.10f);
             rz = lerp(q, -0.26f, -0.05f);
@@ -159,7 +166,7 @@ public final class ClientGojoSkinCaster {
             ly = lerp(q, 0.72f, 0.10f);
             lz = lerp(q, 0.26f, 0.05f);
         } else {
-            float q = smooth(220.0f, 330.0f, t);
+            float q = smooth(194.0f, 220.0f, t);
             rx = lerp(q, -1.68f, -1.50f);
             ry = lerp(q, -0.10f, 0.0f);
             rz = lerp(q, -0.05f, 0.0f);

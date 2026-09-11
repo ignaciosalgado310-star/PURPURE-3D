@@ -20,17 +20,18 @@ import net.minecraftforge.fml.common.Mod;
 import org.joml.Matrix4f;
 
 /**
- * V12 extra anime polish. Solo agrega geometria 3D translucida alrededor de
- * Hollow Purple. No modifica posiciones, tiempos, dano, totems ni audio.
+ * V15 anime polish. Geometría 3D alrededor de Hollow Purple sincronizada con
+ * la nueva fusión y, tras el impacto, anclada al jugador para viajar con él.
  */
 @Mod.EventBusSubscriber(modid = PurpureMod.MODID, value = Dist.CLIENT, bus = Mod.EventBusSubscriber.Bus.FORGE)
 public final class ClientAnimePolish {
     private static final float FUSION_X = 2.65f;
     private static final float FUSION_Y = 2.08f;
-    private static final float PURPLE_BIRTH_TICK = 152.0f;
-    private static final float PURPLE_GROW_END = 220.0f;
-    private static final float LAUNCH_START = 218.0f;
-    private static final float LAUNCH_END = 340.0f;
+    private static final float PURPLE_BIRTH_TICK = 150.0f;
+    private static final float PURPLE_GROW_END = 195.0f;
+    private static final float LAUNCH_START = 194.0f;
+    private static final float LAUNCH_END = 220.0f;
+    private static final float TRAVEL_X = 0.75f;
 
     private ClientAnimePolish() {}
 
@@ -51,18 +52,19 @@ public final class ClientAnimePolish {
             float t = base + partial;
             if (t < PURPLE_BIRTH_TICK) continue;
 
-            float born = smooth(PURPLE_BIRTH_TICK, 170.0f, t);
-            float grow = smooth(168.0f, PURPLE_GROW_END, t);
+            float born = smooth(PURPLE_BIRTH_TICK, 168.0f, t);
+            float grow = smooth(160.0f, PURPLE_GROW_END, t);
             float launch = smooth(LAUNCH_START, LAUNCH_END, t);
             float small = Mth.lerp(born, 0.06f, 0.78f);
-            float radius = Mth.lerp(grow, small, 4.15f);
+            float radius = Mth.lerp(grow, small, 3.62f);
 
-            if (t >= 166.0f && t <= 205.0f) {
-                float pulseFade = 1.0f - smooth(192.0f, 207.0f, t);
-                radius *= 1.0f + Mth.sin((t - 166.0f) * 0.42f) * 0.045f * pulseFade;
+            if (t >= 164.0f && t <= 194.0f) {
+                float pulseFade = 1.0f - smooth(187.0f, 198.0f, t);
+                radius *= 1.0f + Mth.sin((t - 164.0f) * 0.42f) * 0.040f * pulseFade;
             }
 
-            float px = Mth.lerp(launch, FUSION_X, 0.0f);
+            radius *= Mth.lerp(launch, 1.0f, 0.88f);
+            float px = Mth.lerp(launch, FUSION_X, TRAVEL_X);
             float py = Mth.lerp(launch, FUSION_Y, 1.58f);
 
             pose.pushPose();
@@ -84,8 +86,8 @@ public final class ClientAnimePolish {
     private static void drawCorona(PoseStack pose, float r, float t) {
         if (r < 0.20f) return;
 
-        float strength = smooth(160.0f, 188.0f, t);
-        float birthFlash = smooth(152.0f, 166.0f, t) * (1.0f - smooth(178.0f, 198.0f, t));
+        float strength = smooth(156.0f, 184.0f, t);
+        float birthFlash = smooth(150.0f, 164.0f, t) * (1.0f - smooth(178.0f, 196.0f, t));
 
         setGlow();
         Matrix4f m = pose.last().pose();

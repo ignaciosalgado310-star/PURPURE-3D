@@ -22,9 +22,8 @@ import net.minecraftforge.fml.common.Mod;
 import org.joml.Matrix4f;
 
 /**
- * V14 - anime chromatic / bloom pass.
- * Visual-only: no cambia comando, dano, totems, audio ni logica del ritual.
- * Sin particulas 2D: toda la energia es geometria 3D procedural.
+ * V15 - fusión continua Blue + Red -> Hollow Purple y fase de viaje.
+ * Sin partículas 2D: toda la energía es geometría 3D procedural.
  */
 @Mod.EventBusSubscriber(modid = PurpureMod.MODID, value = Dist.CLIENT, bus = Mod.EventBusSubscriber.Bus.FORGE)
 public final class ClientGojoAttack {
@@ -33,14 +32,16 @@ public final class ClientGojoAttack {
     private static final float GOJO_X = 4.0f;
     private static final float FUSION_X = 2.65f;
     private static final float FUSION_Y = 2.08f;
-    private static final float PURPLE_END_X = -5.25f;
+    // Tras el impacto el renderer está anclado al jugador: +X deja al jugador
+    // en la zona frontal de la esfera mientras ambos viajan hacia -X.
+    private static final float PURPLE_END_X = 0.75f;
 
     private static final float CONTACT_TICK = 150.0f;
-    private static final float ORBS_END_TICK = 166.0f;
-    private static final float PURPLE_BIRTH_TICK = 152.0f;
-    private static final float PURPLE_GROW_END = 220.0f;
-    private static final float LAUNCH_START = 218.0f;
-    private static final float LAUNCH_END = 340.0f;
+    private static final float ORBS_END_TICK = 178.0f;
+    private static final float PURPLE_BIRTH_TICK = 150.0f;
+    private static final float PURPLE_GROW_END = 195.0f;
+    private static final float LAUNCH_START = 194.0f;
+    private static final float LAUNCH_END = 220.0f;
 
     private ClientGojoAttack() {}
 
@@ -78,7 +79,8 @@ public final class ClientGojoAttack {
     }
 
     private static void drawAttack(PoseStack pose, float t, float camX, float camY, float camZ) {
-        // AZUL + ROJO: mismo recorrido y mismo momento de contacto.
+        // Blue y Red permanecen visibles durante el contacto mientras el violeta
+        // nace justo en la zona donde ambos volúmenes se interpenetran.
         if (t < ORBS_END_TICK) {
             float appear = smooth(10.0f, 34.0f, t);
             float converge = smooth(38.0f, CONTACT_TICK, t);
@@ -112,29 +114,29 @@ public final class ClientGojoAttack {
             drawOrb(pose, blue, t, 0.0f, true);
             drawOrb(pose, red, t, 2.35f, false);
 
-            if (t >= 140.0f) {
-                float q = smooth(140.0f, CONTACT_TICK, t)
-                        * (1.0f - smooth(160.0f, ORBS_END_TICK, t));
+            if (t >= 132.0f) {
+                float q = smooth(132.0f, CONTACT_TICK, t)
+                        * (1.0f - smooth(170.0f, ORBS_END_TICK, t));
                 drawFusion(pose, blue, red, t, q);
             }
         }
 
-        // HOLLOW PURPLE: nace tras el contacto, atraviesa al objetivo y sigue de largo.
+        // Es EL MISMO Purple que nace de la mezcla. Una vez lanzado queda a una
+        // posición estable respecto al jugador y viaja junto con él.
         if (t >= PURPLE_BIRTH_TICK) {
-            float born = smooth(PURPLE_BIRTH_TICK, 170.0f, t);
-            float grow = smooth(168.0f, PURPLE_GROW_END, t);
+            float born = smooth(PURPLE_BIRTH_TICK, 168.0f, t);
+            float grow = smooth(160.0f, PURPLE_GROW_END, t);
             float launch = smooth(LAUNCH_START, LAUNCH_END, t);
 
             float small = Mth.lerp(born, 0.06f, 0.78f);
             float radius = Mth.lerp(grow, small, 3.25f);
 
-            if (t >= 166.0f && t <= 205.0f) {
-                float pulseFade = 1.0f - smooth(192.0f, 207.0f, t);
-                radius *= 1.0f + Mth.sin((t - 166.0f) * 0.42f) * 0.040f * pulseFade;
+            if (t >= 164.0f && t <= 194.0f) {
+                float pulseFade = 1.0f - smooth(187.0f, 198.0f, t);
+                radius *= 1.0f + Mth.sin((t - 164.0f) * 0.42f) * 0.040f * pulseFade;
             }
 
-            // Al salir se compacta un poco para que parezca proyectil de energia y no una pared.
-            radius *= Mth.lerp(launch, 1.0f, 0.84f);
+            radius *= Mth.lerp(launch, 1.0f, 0.88f);
 
             float px = Mth.lerp(launch, FUSION_X, PURPLE_END_X);
             float py = Mth.lerp(launch, FUSION_Y, 1.58f);
@@ -167,7 +169,6 @@ public final class ClientGojoAttack {
         animeSphere(pose, o.size * 0.58f, ir, ig, ib, 0.98f,
                 -t * 0.075f + phase, false, 0.030f);
 
-        // Bloom falso por capas aditivas: mas intensidad sin particulas.
         animeSphere(pose, o.size * 1.035f,
                 Mth.clamp(o.r * 1.25f + 0.04f, 0.0f, 1.0f),
                 Mth.clamp(o.g * 1.22f + 0.05f, 0.0f, 1.0f),
@@ -215,7 +216,6 @@ public final class ClientGojoAttack {
     private static void drawFusion(PoseStack pose, Orb blue, Orb red, float t, float q) {
         if (q <= 0.01f) return;
 
-        // Puentes de energia donde el color cambia realmente de azul -> violeta -> rojo.
         for (int strand = 0; strand < 12; strand++) {
             float phase = strand * 0.61f + t * 0.13f;
             float px = blue.x;
@@ -264,13 +264,15 @@ public final class ClientGojoAttack {
         pose.pushPose();
         pose.translate(mx, my, mz);
 
-        // Nucleo de mezcla: aqui se ven los tres colores al mismo tiempo.
+        // Este núcleo no se sustituye por otro asset: se apaga a la vez que el
+        // Hollow Purple principal nace en exactamente el mismo punto.
+        float coreFade = 1.0f - smooth(PURPLE_BIRTH_TICK, 168.0f, t);
         mixedSphere(pose, 0.11f + q * 0.43f, t * 0.095f,
-                0.92f * q, false, 0.060f);
+                0.92f * q * coreFade, false, 0.060f);
         mixedSphere(pose, 0.16f + q * 0.58f, -t * 0.075f,
-                0.28f * q, true, 0.045f);
+                0.28f * q * coreFade, true, 0.045f);
         animeSphere(pose, 0.055f + q * 0.18f,
-                0.96f, 0.62f, 1.0f, 0.90f * q,
+                0.96f, 0.62f, 1.0f, 0.90f * q * coreFade,
                 t * 0.18f, true, 0.025f);
         pose.popPose();
     }
@@ -281,7 +283,6 @@ public final class ClientGojoAttack {
         float bodyAlpha = Mth.lerp(cameraFade, 0.12f, 1.0f);
         float glowFade = Mth.clamp(cameraFade * cameraFade, 0.015f, 1.0f);
 
-        // El cuerpo ya no es morado plano: mezcla azul, violeta y rojo en la superficie.
         if (cameraFade > 0.94f) {
             mixedSphere(pose, r, t * 0.030f, 1.0f, false, 0.060f);
             animeSphere(pose, r * 0.73f, 0.57f, 0.025f, 0.98f, 0.94f,
@@ -292,13 +293,11 @@ public final class ClientGojoAttack {
                     bodyAlpha * 0.82f, -t * 0.064f, 0.030f);
         }
 
-        // Corazon luminoso, pero mas pequeno para conservar volumen y profundidad.
         animeSphere(pose, r * 0.36f, 0.78f, 0.12f, 1.00f,
                 0.72f * cameraFade, t * 0.085f, true, 0.022f);
         animeSphere(pose, r * 0.13f, 0.98f, 0.63f, 1.00f,
                 0.82f * cameraFade, -t * 0.11f, true, 0.012f);
 
-        // Bloom volumetrico de varias frecuencias.
         mixedSphere(pose, r * 1.018f, -t * 0.052f,
                 0.23f * glowFade, true, 0.050f);
         mixedSphere(pose, r * 1.048f, t * 0.041f,
@@ -329,7 +328,6 @@ public final class ClientGojoAttack {
             pose.popPose();
         }
 
-        // Ecos claros de Blue y Red, ahora visibles durante toda la mezcla.
         pose.pushPose();
         pose.mulPose(Axis.YP.rotationDegrees(37.0f));
         pose.mulPose(Axis.ZP.rotationDegrees(-t * 0.22f));
@@ -521,7 +519,6 @@ public final class ClientGojoAttack {
                 + Mth.sin(lon * 10.0f - lat * 5.0f - phase * 0.73f) * 0.48f;
         float rr = radius * (1.0f + surfaceEnergy * wave * 0.18f);
 
-        // Campo cromatico que rota: zonas azules y rojas se funden en violeta.
         float field = 0.5f + 0.5f * Mth.sin(lon * 1.85f + lat * 2.55f + phase);
         float fine = 0.5f + 0.5f * Mth.sin(lon * 5.2f - lat * 3.7f - phase * 1.35f);
         float mix = Mth.clamp(field * 0.78f + fine * 0.22f, 0.0f, 1.0f);

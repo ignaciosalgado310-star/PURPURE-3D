@@ -12,8 +12,9 @@ import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 
 /**
- * V8 cinematic camera. El jugador mira a Gojo desde tercera persona trasera,
- * para que Gojo permanezca enfrente y visible durante toda la preparacion.
+ * V15 cinematic camera. Mantiene tercera persona durante TODO el viaje con
+ * Hollow Purple, pero concentra el movimiento de cámara en la preparación y
+ * liberación para evitar vibración, mareo y rubberband visual.
  */
 @Mod.EventBusSubscriber(modid = PurpureMod.MODID, value = Dist.CLIENT, bus = Mod.EventBusSubscriber.Bus.FORGE)
 public final class ClientCinematicDirectorV2 {
@@ -32,8 +33,7 @@ public final class ClientCinematicDirectorV2 {
         }
 
         float t = ClientPurpureEffects.effectTick(mc.player.getUUID());
-        boolean cinematic = t >= 0.0f && t <= 365.0f;
-        if (!cinematic) {
+        if (t < 0.0f) {
             restore();
             return;
         }
@@ -43,8 +43,8 @@ public final class ClientCinematicDirectorV2 {
             controllingCamera = true;
         }
 
-        // SIEMPRE detras del jugador: como el servidor lo hace mirar a Gojo,
-        // Gojo queda enfrente de la camara y no escondido detras.
+        // Minecraft ya aplica colisión/raycast a su cámara de tercera persona.
+        // Así la cámara se acerca frente a paredes y vuelve a salir al tener espacio.
         mc.options.setCameraType(CameraType.THIRD_PERSON_BACK);
     }
 
@@ -62,24 +62,26 @@ public final class ClientCinematicDirectorV2 {
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null) return;
         float t = ClientPurpureEffects.effectTick(mc.player.getUUID());
-        if (t < 0.0f || t > 365.0f) return;
+        if (t < 0.0f) return;
 
         t += (float)event.getPartialTick();
 
-        float intro = smooth(0.0f, 42.0f, t) * (1.0f - smooth(72.0f, 100.0f, t));
-        float control = smooth(80.0f, 120.0f, t) * (1.0f - smooth(205.0f, 225.0f, t));
-        float fusion = smooth(220.0f, 245.0f, t) * (1.0f - smooth(270.0f, 290.0f, t));
-        float launch = smooth(300.0f, 340.0f, t) * (1.0f - smooth(350.0f, 365.0f, t));
+        float intro = smooth(0.0f, 34.0f, t) * (1.0f - smooth(72.0f, 96.0f, t));
+        float setup = smooth(70.0f, 105.0f, t) * (1.0f - smooth(138.0f, 156.0f, t));
+        float fusion = smooth(138.0f, 154.0f, t) * (1.0f - smooth(184.0f, 199.0f, t));
+        float launch = smooth(190.0f, 202.0f, t) * (1.0f - smooth(220.0f, 236.0f, t));
 
-        // Movimiento pequeno: no giramos tanto la camara como para sacar a Gojo del encuadre.
         event.setYaw(event.getYaw()
-                + Mth.sin(t * 0.045f) * 2.4f * intro
-                + Mth.sin(t * 0.035f) * 1.5f * control
-                + Mth.sin(t * 0.20f) * 0.65f * fusion);
-        event.setPitch(event.getPitch() - 1.5f * intro - 0.8f * control + 0.6f * launch);
+                + Mth.sin(t * 0.040f) * 1.75f * intro
+                + Mth.sin(t * 0.033f) * 1.10f * setup
+                + Mth.sin(t * 0.12f) * 0.45f * fusion);
+        event.setPitch(event.getPitch()
+                - 1.10f * intro
+                - 0.65f * setup
+                + 0.45f * launch);
         event.setRoll(event.getRoll()
-                + Mth.sin(t * 0.080f) * 0.40f * control
-                + Mth.sin(t * 0.31f) * 0.55f * fusion);
+                + Mth.sin(t * 0.075f) * 0.22f * setup
+                + Mth.sin(t * 0.20f) * 0.28f * fusion);
     }
 
     @SubscribeEvent
@@ -87,31 +89,30 @@ public final class ClientCinematicDirectorV2 {
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null) return;
         float t = ClientPurpureEffects.effectTick(mc.player.getUUID());
-        if (t < 0.0f || t > 365.0f) return;
+        if (t < 0.0f) return;
 
         int w = event.getWindow().getGuiScaledWidth();
         int h = event.getWindow().getGuiScaledHeight();
 
-        float bars = smooth(0.0f, 18.0f, t) * (1.0f - smooth(342.0f, 365.0f, t));
-        int barHeight = (int)(h * 0.040f * bars);
+        float bars = smooth(0.0f, 18.0f, t);
+        int barHeight = (int)(h * 0.036f * bars);
         if (barHeight > 0) {
-            event.getGuiGraphics().fill(0, 0, w, barHeight, 0xC2000000);
-            event.getGuiGraphics().fill(0, h - barHeight, w, h, 0xC2000000);
+            event.getGuiGraphics().fill(0, 0, w, barHeight, 0xB8000000);
+            event.getGuiGraphics().fill(0, h - barHeight, w, h, 0xB8000000);
         }
 
-        // Morado SOLO cuando ya empieza la fusion real.
-        float purpleTint = smooth(238.0f, 265.0f, t) * (1.0f - smooth(338.0f, 360.0f, t));
-        int pa = Mth.clamp((int)(purpleTint * 13.0f), 0, 16);
+        // Tinte solo en la fusión/liberación; durante el arrastre el mundo vuelve a verse limpio.
+        float purpleTint = smooth(145.0f, 166.0f, t) * (1.0f - smooth(221.0f, 238.0f, t));
+        int pa = Mth.clamp((int)(purpleTint * 11.0f), 0, 13);
         if (pa > 0) {
             event.getGuiGraphics().fill(0, 0, w, h, (pa << 24) | 0x6200E8);
         }
 
-        // Antes era blanco. Ahora los dos flashes son morados y suaves.
-        float birthFlash = 1.0f - Mth.clamp(Math.abs(t - 255.0f) / 4.5f, 0.0f, 1.0f);
-        float launchFlash = 1.0f - Mth.clamp(Math.abs(t - 338.0f) / 5.5f, 0.0f, 1.0f);
-        int fa = Mth.clamp((int)(birthFlash * 30.0f + launchFlash * 25.0f), 0, 34);
+        float birthFlash = 1.0f - Mth.clamp(Math.abs(t - 166.0f) / 5.0f, 0.0f, 1.0f);
+        float launchFlash = 1.0f - Mth.clamp(Math.abs(t - 220.0f) / 5.5f, 0.0f, 1.0f);
+        int fa = Mth.clamp((int)(birthFlash * 20.0f + launchFlash * 28.0f), 0, 30);
         if (fa > 0) {
-            event.getGuiGraphics().fill(0, 0, w, h, (fa << 24) | 0xA52CFF);
+            event.getGuiGraphics().fill(0, 0, w, h, (fa << 24) | 0x9B35FF);
         }
     }
 

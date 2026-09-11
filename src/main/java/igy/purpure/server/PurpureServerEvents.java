@@ -7,17 +7,12 @@ import igy.purpure.network.PurpureEffectPacket;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.arguments.EntityArgument;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.Rotations;
-import net.minecraft.nbt.CompoundTag;
-import net.minecraft.nbt.ListTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundSource;
-import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.decoration.ArmorStand;
 import net.minecraft.world.entity.player.Inventory;
-import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
@@ -29,22 +24,23 @@ import net.minecraftforge.network.PacketDistributor;
 
 import java.util.ArrayDeque;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Random;
+import java.util.Set;
 import java.util.UUID;
 
 @Mod.EventBusSubscriber(modid = PurpureMod.MODID, bus = Mod.EventBusSubscriber.Bus.FORGE)
 public final class PurpureServerEvents {
     private static final Map<UUID, Ritual> ACTIVE = new HashMap<>();
 
-    private static final int IMPACT = 340;
+    // V15: el punto fuerte del audio de referencia cae alrededor de 10-11 s.
+    private static final int IMPACT = 220;
     private static final int INTERVAL = 2;
     private static final double GOJO_OFFSET_X = 4.0;
-
-    // Cabeza de Gojo para que el NPC siempre sea visible sin depender de un renderer cliente.
-    private static final String GOJO_HEAD_TEXTURE =
-            "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvNDcxY2JkNjZjNzBhYmEyMDU0NzI3ZTc0YmJjODg4NzcxYmFhNzgwZDdmMmJmMTE0MzNlYzY4YjZiZjUxNmZkMiJ9fX0=";
+    private static final double TRAVEL_SPEED = 0.38;
+    private static final int BLOCK_BUDGET_PER_TICK = 520;
 
     private PurpureServerEvents() {}
 
@@ -55,7 +51,7 @@ public final class PurpureServerEvents {
                         .requires(source -> source.hasPermission(2))
                         .then(Commands.argument("target", EntityArgument.player())
                                 .executes(context -> start(EntityArgument.getPlayer(context, "target"), 25))
-                                .then(Commands.argument("hits", IntegerArgumentType.integer(1, 300))
+                                .then(Commands.argument("hits", IntegerArgumentType.integer(1))
                                         .executes(context -> start(
                                                 EntityArgument.getPlayer(context, "target"),
                                                 IntegerArgumentType.getInteger(context, "hits")
@@ -66,17 +62,19 @@ public final class PurpureServerEvents {
     private static int start(ServerPlayer player, int hits) {
         Ritual existing = ACTIVE.get(player.getUUID());
         if (existing != null) {
-            existing.hits = Math.min(2000, existing.hits + hits);
+            long expanded = (long)existing.hits + hits;
+            existing.hits = (int)Math.min(Integer.MAX_VALUE / 4L, expanded);
             send(existing, PurpureEffectPacket.EXTEND, hits);
-            player.sendSystemMessage(Component.literal("§5§lHOLLOW PURPLE §7• §d+" + hits + " golpes"));
+            player.sendSystemMessage(Component.literal("§5§lHOLLOW PURPLE §7• §d+" + hits + " tótems"));
             return 1;
         }
 
         Ritual ritual = new Ritual(player, hits);
         ACTIVE.put(player.getUUID(), ritual);
-        ritual.spawnGojo();
+        ritual.spawnGojoAnchor();
         send(ritual, PurpureEffectPacket.START, hits);
 
+        // El OGG de este evento es ahora el audio extraído del video de referencia.
         ritual.level.playSound(
                 null,
                 player.blockPosition(),
@@ -131,35 +129,6 @@ public final class PurpureServerEvents {
         }
     }
 
-    private static ItemStack createGojoHead() {
-        ItemStack head = new ItemStack(Items.PLAYER_HEAD);
-        CompoundTag owner = new CompoundTag();
-        CompoundTag properties = new CompoundTag();
-        ListTag textures = new ListTag();
-        CompoundTag texture = new CompoundTag();
-        texture.putString("Value", GOJO_HEAD_TEXTURE);
-        textures.add(texture);
-        properties.put("textures", textures);
-        owner.put("Properties", properties);
-        head.getOrCreateTag().put("SkullOwner", owner);
-        return head;
-    }
-
-    private static ItemStack blackLeather(Item item) {
-        ItemStack stack = new ItemStack(item);
-        stack.getOrCreateTagElement("display").putInt("color", 0x050711);
-        return stack;
-    }
-
-    private static float smooth(float start, float end, float value) {
-        float x = Math.max(0.0f, Math.min(1.0f, (value - start) / (end - start)));
-        return x * x * (3.0f - 2.0f * x);
-    }
-
-    private static float lerp(float q, float a, float b) {
-        return a + (b - a) * q;
-    }
-
     private static final class Ritual {
         final UUID id;
         final ServerLevel level;
@@ -167,7 +136,8 @@ public final class PurpureServerEvents {
         final double y;
         final double z;
         final long seed = new Random().nextLong();
-        final ArrayDeque<BlockPos> crater = new ArrayDeque<>();
+        final ArrayDeque<BlockPos> blocksToErase = new ArrayDeque<>();
+        final Set<BlockPos> queuedBlocks = new HashSet<>();
 
         ArmorStand gojo;
         int t;
@@ -180,73 +150,36 @@ public final class PurpureServerEvents {
             this.x = player.getX();
             this.y = player.getY();
             this.z = player.getZ();
-            this.hits = hits;
+            this.hits = Math.max(1, hits);
         }
 
-        void spawnGojo() {
+        void spawnGojoAnchor() {
             if (gojo != null && gojo.isAlive()) return;
 
             gojo = new ArmorStand(level, x + GOJO_OFFSET_X, y, z);
             gojo.setNoGravity(true);
             gojo.setInvulnerable(true);
             gojo.setSilent(true);
-            gojo.setInvisible(false);
-            gojo.setShowArms(true);
+            gojo.setInvisible(true);
             gojo.setNoBasePlate(true);
-            gojo.setCustomName(Component.literal("§f§lGojo Satoru"));
-            gojo.setCustomNameVisible(false);
-
-            // +X desde el jugador; yaw 90 mira hacia -X, o sea hacia el objetivo.
             gojo.setYRot(90.0f);
             gojo.setYHeadRot(90.0f);
-
-            gojo.setItemSlot(EquipmentSlot.HEAD, createGojoHead());
-            gojo.setItemSlot(EquipmentSlot.CHEST, blackLeather(Items.LEATHER_CHESTPLATE));
-            gojo.setItemSlot(EquipmentSlot.LEGS, blackLeather(Items.LEATHER_LEGGINGS));
-            gojo.setItemSlot(EquipmentSlot.FEET, blackLeather(Items.LEATHER_BOOTS));
-
-            gojo.setHeadPose(new Rotations(-5.0f, 0.0f, 0.0f));
-            gojo.setBodyPose(new Rotations(0.0f, 0.0f, 0.0f));
-            gojo.setRightArmPose(new Rotations(5.0f, 0.0f, 8.0f));
-            gojo.setLeftArmPose(new Rotations(-4.0f, 0.0f, -8.0f));
-            gojo.setRightLegPose(new Rotations(1.5f, 0.0f, 1.5f));
-            gojo.setLeftLegPose(new Rotations(-1.5f, 0.0f, -1.5f));
-
             level.addFreshEntity(gojo);
         }
 
-        int end() {
-            return Math.max(390, IMPACT + hits * INTERVAL + 25);
+        long endTick() {
+            return Math.max(260L, (long)IMPACT + (long)hits * INTERVAL + 30L);
         }
 
         void tick(ServerPlayer player) {
             t++;
+            if (gojo == null || !gojo.isAlive()) spawnGojoAnchor();
 
-            if (gojo == null || !gojo.isAlive()) spawnGojo();
-            animateGojo();
-
-            if (t < end()) {
-                // El jugador queda quieto mirando DIRECTAMENTE a Gojo.
-                double gx = x + GOJO_OFFSET_X;
-                double gy = y + 1.55;
-                double gz = z;
-                double eyeY = y + 1.62;
-                double dx = gx - x;
-                double dz = gz - z;
-                double dy = gy - eyeY;
-                double horizontal = Math.sqrt(dx * dx + dz * dz);
-                float yaw = (float)Math.toDegrees(Math.atan2(-dx, dz));
-                float pitch = (float)-Math.toDegrees(Math.atan2(dy, horizontal));
-
-                player.teleportTo(level, x, y, z, yaw, pitch);
-                player.setYHeadRot(yaw);
-                player.setYBodyRot(yaw);
-                player.setDeltaMovement(0.0, 0.0, 0.0);
-                player.fallDistance = 0.0f;
-                player.hurtMarked = true;
+            if (t < IMPACT) {
+                holdForCinematic(player);
+            } else {
+                dragWithPurple(player);
             }
-
-            if (t == IMPACT) queueCrater(player.blockPosition());
 
             if (t >= IMPACT && completedHits < hits) {
                 int due = Math.min(hits, ((t - IMPACT) / INTERVAL) + 1);
@@ -256,71 +189,95 @@ public final class PurpureServerEvents {
                 }
             }
 
-            for (int i = 0; i < 120 && !crater.isEmpty(); i++) {
-                BlockPos pos = crater.poll();
-                if (!level.getBlockState(pos).isAir()
-                        && !level.getBlockState(pos).is(Blocks.BEDROCK)
-                        && level.getBlockEntity(pos) == null) {
-                    level.destroyBlock(pos, false);
+            eraseQueuedBlocks();
+        }
+
+        void holdForCinematic(ServerPlayer player) {
+            double gx = x + GOJO_OFFSET_X;
+            double gy = y + 1.55;
+            double eyeY = y + 1.62;
+            double dx = gx - x;
+            double dz = z - z;
+            double dy = gy - eyeY;
+            double horizontal = Math.sqrt(dx * dx + dz * dz);
+            float yaw = (float)Math.toDegrees(Math.atan2(-dx, dz));
+            float pitch = (float)-Math.toDegrees(Math.atan2(dy, horizontal));
+
+            player.setNoGravity(false);
+            player.teleportTo(level, x, y, z, yaw, pitch);
+            player.setYHeadRot(yaw);
+            player.setYBodyRot(yaw);
+            player.setDeltaMovement(0.0, 0.0, 0.0);
+            player.fallDistance = 0.0f;
+            player.hurtMarked = true;
+        }
+
+        void dragWithPurple(ServerPlayer player) {
+            int travelTick = Math.max(0, t - IMPACT);
+            double desiredX = x - travelTick * TRAVEL_SPEED;
+            double desiredY = y + 0.18;
+            double desiredZ = z;
+
+            // Abrimos primero el volumen inmediatamente delante del ataque.
+            queueTunnel(desiredX - 1.8, desiredY + 1.3, desiredZ);
+            eraseQueuedBlocks();
+
+            player.setNoGravity(true);
+            player.fallDistance = 0.0f;
+            player.setYRot(90.0f);
+            player.setYHeadRot(90.0f);
+            player.setYBodyRot(90.0f);
+
+            double errX = desiredX - player.getX();
+            double errY = desiredY - player.getY();
+            double errZ = desiredZ - player.getZ();
+            double errorSq = errX * errX + errY * errY + errZ * errZ;
+
+            if (errorSq > 2.25) {
+                // Corrección excepcional, no teletransporte cada tick.
+                player.teleportTo(level, desiredX, desiredY, desiredZ, 90.0f, 0.0f);
+            } else {
+                double vy = Math.max(-0.22, Math.min(0.22, errY * 0.45));
+                double vz = Math.max(-0.12, Math.min(0.12, errZ * 0.35));
+                player.setDeltaMovement(-TRAVEL_SPEED, vy, vz);
+            }
+
+            player.hurtMarked = true;
+        }
+
+        void queueTunnel(double centerX, double centerY, double centerZ) {
+            int rx = 5;
+            int ry = 4;
+            int rz = 5;
+            BlockPos center = BlockPos.containing(centerX, centerY, centerZ);
+
+            for (int dx = -rx; dx <= rx; dx++) {
+                for (int dy = -ry; dy <= ry; dy++) {
+                    for (int dz = -rz; dz <= rz; dz++) {
+                        double n = (dx * dx) / 25.0 + (dy * dy) / 16.0 + (dz * dz) / 25.0;
+                        if (n > 1.0) continue;
+
+                        BlockPos pos = center.offset(dx, dy, dz);
+                        if (!level.hasChunkAt(pos)) continue;
+                        if (queuedBlocks.add(pos)) blocksToErase.add(pos);
+                    }
                 }
             }
         }
 
-        void animateGojo() {
-            if (gojo == null || !gojo.isAlive()) return;
+        void eraseQueuedBlocks() {
+            int budget = BLOCK_BUDGET_PER_TICK;
+            while (budget-- > 0 && !blocksToErase.isEmpty()) {
+                BlockPos pos = blocksToErase.poll();
+                queuedBlocks.remove(pos);
+                if (!level.hasChunkAt(pos)) continue;
 
-            gojo.teleportTo(x + GOJO_OFFSET_X, y, z);
-            float sway = (float)Math.sin(t * 0.045) * 2.2f;
-            gojo.setYRot(90.0f + sway);
-            gojo.setYHeadRot(90.0f + sway * 0.55f);
+                var state = level.getBlockState(pos);
+                if (state.isAir() || state.is(Blocks.BEDROCK) || level.getBlockEntity(pos) != null) continue;
 
-            float rightX, rightY, rightZ;
-            float leftX, leftY, leftZ;
-
-            if (t < 82) {
-                float q = smooth(8.0f, 76.0f, t);
-                rightX = lerp(q, 5.0f, -48.0f);
-                rightY = lerp(q, 0.0f, -20.0f);
-                rightZ = lerp(q, 8.0f, -25.0f);
-                leftX = lerp(q, -4.0f, -44.0f);
-                leftY = lerp(q, 0.0f, 20.0f);
-                leftZ = lerp(q, -8.0f, 25.0f);
-            } else if (t < 220) {
-                float q = smooth(82.0f, 205.0f, t);
-                rightX = lerp(q, -48.0f, -74.0f);
-                rightY = lerp(q, -20.0f, -36.0f);
-                rightZ = lerp(q, -25.0f, -18.0f);
-                leftX = lerp(q, -44.0f, -74.0f);
-                leftY = lerp(q, 20.0f, 36.0f);
-                leftZ = lerp(q, 25.0f, 18.0f);
-            } else if (t < 275) {
-                // Fusion: manos juntas poco a poco.
-                float q = smooth(220.0f, 265.0f, t);
-                rightX = lerp(q, -74.0f, -98.0f);
-                rightY = lerp(q, -36.0f, -6.0f);
-                rightZ = lerp(q, -18.0f, -4.0f);
-                leftX = lerp(q, -74.0f, -98.0f);
-                leftY = lerp(q, 36.0f, 6.0f);
-                leftZ = lerp(q, 18.0f, 4.0f);
-            } else {
-                // Lanzamiento: brazo derecho apunta al jugador y el izquierdo baja.
-                float q = smooth(275.0f, 330.0f, t);
-                rightX = lerp(q, -98.0f, -88.0f);
-                rightY = lerp(q, -6.0f, 0.0f);
-                rightZ = lerp(q, -4.0f, 0.0f);
-                leftX = lerp(q, -98.0f, -24.0f);
-                leftY = lerp(q, 6.0f, 10.0f);
-                leftZ = lerp(q, 4.0f, 12.0f);
+                // Hollow Purple borra materia: sin miles de FallingBlock ni drops.
+                level.setBlock(pos, Blocks.AIR.defaultBlockState(), 3);
             }
-
-            float breathe = (float)Math.sin(t * 0.11) * 2.0f;
-            float body = (float)Math.sin(t * 0.052) * 2.2f;
-            gojo.setRightArmPose(new Rotations(rightX + breathe, rightY, rightZ));
-            gojo.setLeftArmPose(new Rotations(leftX - breathe, leftY, leftZ));
-            gojo.setHeadPose(new Rotations(-5.0f + (float)Math.sin(t * 0.055) * 2.2f, -body * 0.4f, 0.0f));
-            gojo.setBodyPose(new Rotations(-1.5f + body * 0.18f, body, 0.0f));
-            gojo.setRightLegPose(new Rotations(2.0f + breathe * 0.20f, 0.0f, 1.8f));
-            gojo.setLeftLegPose(new Rotations(-2.0f - breathe * 0.18f, 0.0f, -1.8f));
         }
 
         void cleanup() {
@@ -328,6 +285,14 @@ public final class PurpureServerEvents {
                 gojo.discard();
                 gojo = null;
             }
+            ServerPlayer player = level.getServer().getPlayerList().getPlayer(id);
+            if (player != null) {
+                player.setNoGravity(false);
+                player.setDeltaMovement(0.0, player.getDeltaMovement().y, 0.0);
+                player.hurtMarked = true;
+            }
+            blocksToErase.clear();
+            queuedBlocks.clear();
         }
 
         void hit(ServerPlayer player) {
@@ -356,26 +321,8 @@ public final class PurpureServerEvents {
             return false;
         }
 
-        void queueCrater(BlockPos center) {
-            int radiusX = 10;
-            int radiusY = 5;
-            int radiusZ = 10;
-
-            for (int dx = -radiusX; dx <= radiusX; dx++) {
-                for (int dy = -radiusY; dy <= radiusY; dy++) {
-                    for (int dz = -radiusZ; dz <= radiusZ; dz++) {
-                        double normalized =
-                                (dx * dx) / 100.0 +
-                                (dy * dy) / 25.0 +
-                                (dz * dz) / 100.0;
-                        if (normalized <= 1.0) crater.add(center.offset(dx, dy, dz));
-                    }
-                }
-            }
-        }
-
         boolean done() {
-            return t > end() && crater.isEmpty();
+            return completedHits >= hits && t > endTick() && blocksToErase.isEmpty();
         }
     }
 }
