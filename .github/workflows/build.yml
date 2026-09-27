@@ -34,7 +34,8 @@ jobs:
             src/main/resources/assets/purpure/sounds/hollow_purple_video.fixed.01.b64 \
             src/main/resources/assets/purpure/sounds/hollow_purple_video.fixed.02.b64 \
             src/main/resources/assets/purpure/sounds/hollow_purple_video.fixed.03.b64 \
-            src/main/resources/assets/purpure/sounds/hollow_purple_video.fixed.04.b64 \
+            src/main/resources/assets/purpure/sounds/hollow_purple_video.fixed.04a.b64 \
+            src/main/resources/assets/purpure/sounds/hollow_purple_video.fixed.04b.b64 \
             src/main/resources/assets/purpure/sounds/hollow_purple_video.fixed.05.b64 \
             > /tmp/hollow_purple_video.b64
           base64 -d /tmp/hollow_purple_video.b64 > src/main/resources/assets/purpure/sounds/hollow_purple_video.ogg
