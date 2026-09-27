@@ -30,14 +30,12 @@ jobs:
         run: |
           # Audio original de PURPURE-3D. No se recorta ni se acelera.
           cat \
-            src/main/resources/assets/purpure/sounds/hollow_purple_video.00.b64 \
-            src/main/resources/assets/purpure/sounds/hollow_purple_video.01.b64 \
-            src/main/resources/assets/purpure/sounds/hollow_purple_video.02.b64 \
-            src/main/resources/assets/purpure/sounds/hollow_purple_video.03.b64 \
-            src/main/resources/assets/purpure/sounds/hollow_purple_video.04.b64 \
-            src/main/resources/assets/purpure/sounds/hollow_purple_video.05.b64 \
-            src/main/resources/assets/purpure/sounds/hollow_purple_video.06.b64 \
-            src/main/resources/assets/purpure/sounds/hollow_purple_video.b64 \
+            src/main/resources/assets/purpure/sounds/hollow_purple_video.fixed.00.b64 \
+            src/main/resources/assets/purpure/sounds/hollow_purple_video.fixed.01.b64 \
+            src/main/resources/assets/purpure/sounds/hollow_purple_video.fixed.02.b64 \
+            src/main/resources/assets/purpure/sounds/hollow_purple_video.fixed.03.b64 \
+            src/main/resources/assets/purpure/sounds/hollow_purple_video.fixed.04.b64 \
+            src/main/resources/assets/purpure/sounds/hollow_purple_video.fixed.05.b64 \
             > /tmp/hollow_purple_video.b64
           base64 -d /tmp/hollow_purple_video.b64 > src/main/resources/assets/purpure/sounds/hollow_purple_video.ogg
 
@@ -73,6 +71,7 @@ jobs:
           # No empaquetar las fuentes Base64.
           rm -f src/main/resources/assets/purpure/sounds/hollow_purple_video.b64
           rm -f src/main/resources/assets/purpure/sounds/hollow_purple_video.0*.b64
+          rm -f src/main/resources/assets/purpure/sounds/hollow_purple_video.fixed.*.b64
           rm -f src/main/resources/assets/purpure/sounds/hollow_purple_invoke.0*.b64
           rm -f src/main/resources/assets/purpure/textures/entity/gojo_skin.b64
 
@@ -94,6 +93,7 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq ffmpeg >/dev/null
           echo "Audio principal:"
+          test "$(sha256sum src/main/resources/assets/purpure/sounds/hollow_purple_video.ogg | cut -d' ' -f1)" = "fb0d33c8383d871c120cc03242b5fb094b83215ce0b2c2e42ded6701d02f775b"
           ffprobe -v error -show_entries format=duration -of default=nw=1:nk=1 src/main/resources/assets/purpure/sounds/hollow_purple_video.ogg
           ffmpeg -v error -i src/main/resources/assets/purpure/sounds/hollow_purple_video.ogg -f null - 2> /tmp/video_decode.err
           cat /tmp/video_decode.err
