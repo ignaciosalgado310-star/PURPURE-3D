@@ -29,7 +29,16 @@ jobs:
       - name: Prepare approved V14 assets
         run: |
           # Audio original de PURPURE-3D. No se recorta ni se acelera.
-          cat src/main/resources/assets/purpure/sounds/hollow_purple_video.0*.b64 > /tmp/hollow_purple_video.b64
+          cat \
+            src/main/resources/assets/purpure/sounds/hollow_purple_video.00.b64 \
+            src/main/resources/assets/purpure/sounds/hollow_purple_video.01.b64 \
+            src/main/resources/assets/purpure/sounds/hollow_purple_video.02.b64 \
+            src/main/resources/assets/purpure/sounds/hollow_purple_video.03.b64 \
+            src/main/resources/assets/purpure/sounds/hollow_purple_video.04.b64 \
+            src/main/resources/assets/purpure/sounds/hollow_purple_video.05.b64 \
+            src/main/resources/assets/purpure/sounds/hollow_purple_video.06.b64 \
+            src/main/resources/assets/purpure/sounds/hollow_purple_video.b64 \
+            > /tmp/hollow_purple_video.b64
           base64 -d /tmp/hollow_purple_video.b64 > src/main/resources/assets/purpure/sounds/hollow_purple_video.ogg
 
           # Frase de invocacion limpia ya perteneciente al proyecto.
