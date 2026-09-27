@@ -90,9 +90,26 @@ jobs:
           grep -Fq 'IntegerArgumentType.integer(1)' src/main/java/igy/purpure/server/PurpureServerEvents.java
           grep -Fq 'broadcastEntityEvent(player, (byte)35)' src/main/java/igy/purpure/server/PurpureServerEvents.java
 
-          # Validar ambos OGG sin cambiar su contenido.
+          # Validar ambos OGG. El principal conserva timing/contenido y solo se
+          # sanea a un contenedor Vorbis válido para Minecraft.
           sudo apt-get update -qq
           sudo apt-get install -y -qq ffmpeg >/dev/null
+
+          # El audio heredado del repo contiene CRC OGG dañados. FFmpeg puede
+          # decodificarlo completo; lo reempaquetamos/re-codificamos SIN cambiar
+          # velocidad, duración, tono ni contenido temporal para evitar fallos
+          # del decoder de Minecraft/OpenAL.
+          mv src/main/resources/assets/purpure/sounds/hollow_purple_video.ogg /tmp/hollow_purple_video_source.ogg
+          SOURCE_DURATION="$(ffprobe -v error -show_entries format=duration -of default=nw=1:nk=1 /tmp/hollow_purple_video_source.ogg 2>/tmp/source_crc.warn)"
+          ffmpeg -y -v warning -i /tmp/hollow_purple_video_source.ogg \
+            -map_metadata -1 -c:a libvorbis -q:a 5 -ar 22050 -ac 1 \
+            src/main/resources/assets/purpure/sounds/hollow_purple_video.ogg \
+            2>/tmp/source_decode.warn
+          test -s src/main/resources/assets/purpure/sounds/hollow_purple_video.ogg
+
+          FINAL_DURATION="$(ffprobe -v error -show_entries format=duration -of default=nw=1:nk=1 src/main/resources/assets/purpure/sounds/hollow_purple_video.ogg)"
+          awk -v a="$SOURCE_DURATION" -v b="$FINAL_DURATION" 'BEGIN { d=a-b; if (d<0) d=-d; exit !(a>12.0 && a<12.3 && b>12.0 && b<12.3 && d<0.02) }'
+
           echo "Audio principal:"
           sha256sum src/main/resources/assets/purpure/sounds/hollow_purple_video.ogg
           # El audio principal ya era el audio del mod; ffprobe confirma su duracion.
