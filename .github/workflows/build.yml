@@ -26,15 +26,13 @@ jobs:
         with:
           gradle-version: '8.1.1'
 
-      - name: Prepare PURPURE 3D V13
+      - name: Prepare approved V14 assets
         run: |
-          # Audio largo/original que ya tenia PURPURE.
+          # Audio original de PURPURE-3D. No se recorta ni se acelera.
           cat src/main/resources/assets/purpure/sounds/hollow_purple_video.0*.b64 > /tmp/hollow_purple_video.b64
           base64 -d /tmp/hollow_purple_video.b64 > src/main/resources/assets/purpure/sounds/hollow_purple_video.ogg
 
-          # Frase de invocacion limpia extraida del video original.
-          # Las partes se concatenan explicitamente para impedir que un payload viejo
-          # entre accidentalmente en el OGG final.
+          # Frase de invocacion limpia ya perteneciente al proyecto.
           cat \
             src/main/resources/assets/purpure/sounds/hollow_purple_invoke.00.b64 \
             src/main/resources/assets/purpure/sounds/hollow_purple_invoke.01.b64 \
@@ -46,7 +44,7 @@ jobs:
             > /tmp/hollow_purple_invoke.b64
           base64 -d /tmp/hollow_purple_invoke.b64 > src/main/resources/assets/purpure/sounds/hollow_purple_invoke.ogg
 
-          # Skin completa de Gojo.
+          # Skin EXACTA usada por el visor final aprobado V14.
           base64 -d src/main/resources/assets/purpure/textures/entity/gojo_skin.b64 > src/main/resources/assets/purpure/textures/entity/gojo_skin.png
 
           # ArmorStand solo como ancla/logica; Gojo visual lo dibuja el cliente.
@@ -56,29 +54,45 @@ jobs:
           sed -i 's/gojo.setItemSlot(EquipmentSlot.LEGS, blackLeather(Items.LEATHER_LEGGINGS));/gojo.setItemSlot(EquipmentSlot.LEGS, ItemStack.EMPTY);/' src/main/java/igy/purpure/server/PurpureServerEvents.java
           sed -i 's/gojo.setItemSlot(EquipmentSlot.FEET, blackLeather(Items.LEATHER_BOOTS));/gojo.setItemSlot(EquipmentSlot.FEET, ItemStack.EMPTY);/' src/main/java/igy/purpure/server/PurpureServerEvents.java
 
-          # No empaquetar fuentes Base64.
+          # Renderers viejos que no forman parte del visor aprobado.
+          rm -f src/main/java/igy/purpure/client/ClientCasterAnimation.java
+          rm -f src/main/java/igy/purpure/client/ClientEnergyEnhancements.java
+          rm -f src/main/java/igy/purpure/client/ClientCinematicDirector.java
+          rm -f src/main/java/igy/purpure/client/ClientGojoCaster.java
+          rm -f src/main/java/igy/purpure/client/ClientAnimePolish.java
+
+          # No empaquetar las fuentes Base64.
           rm -f src/main/resources/assets/purpure/sounds/hollow_purple_video.b64
           rm -f src/main/resources/assets/purpure/sounds/hollow_purple_video.0*.b64
           rm -f src/main/resources/assets/purpure/sounds/hollow_purple_invoke.0*.b64
           rm -f src/main/resources/assets/purpure/textures/entity/gojo_skin.b64
 
-          # Renderers experimentales viejos.
-          rm -f src/main/java/igy/purpure/client/ClientCasterAnimation.java
-          rm -f src/main/java/igy/purpure/client/ClientEnergyEnhancements.java
-          rm -f src/main/java/igy/purpure/client/ClientCinematicDirector.java
-          rm -f src/main/java/igy/purpure/client/ClientGojoCaster.java
-
-      - name: Verify invocation audio and Gojo skin
+      - name: Verify approved assets and command
         run: |
           test -s src/main/resources/assets/purpure/sounds/hollow_purple_video.ogg
           test -s src/main/resources/assets/purpure/sounds/hollow_purple_invoke.ogg
           test -s src/main/resources/assets/purpure/textures/entity/gojo_skin.png
-          echo "Invocation SHA256:"
-          sha256sum src/main/resources/assets/purpure/sounds/hollow_purple_invoke.ogg
-          test "$(sha256sum src/main/resources/assets/purpure/sounds/hollow_purple_invoke.ogg | cut -d' ' -f1)" = "4adeced1d7398a4cbb26fd7c29b14416f5388c90e633ad5a921c2aa7d1310e7e"
-          file src/main/resources/assets/purpure/sounds/hollow_purple_invoke.ogg
+
+          # Hash de la skin exacta del visor V14 aprobado en este chat.
+          test "$(sha256sum src/main/resources/assets/purpure/textures/entity/gojo_skin.png | cut -d' ' -f1)" = "58ffd5f011335de6d3384897c8c046e8bc71bd02c7f137825b80aa327261d561"
+
+          # El comando sigue sin limite artificial de 300; acepta 9999 y mas.
+          grep -Fq 'Commands.literal("purpure")' src/main/java/igy/purpure/server/PurpureServerEvents.java
+          grep -Fq 'IntegerArgumentType.integer(1)' src/main/java/igy/purpure/server/PurpureServerEvents.java
+          grep -Fq 'broadcastEntityEvent(player, (byte)35)' src/main/java/igy/purpure/server/PurpureServerEvents.java
+
+          # Validar ambos OGG sin cambiar su contenido.
           sudo apt-get update -qq
           sudo apt-get install -y -qq ffmpeg >/dev/null
+          echo "Audio principal:"
+          ffprobe -v error -show_entries format=duration -of default=nw=1:nk=1 src/main/resources/assets/purpure/sounds/hollow_purple_video.ogg
+          ffmpeg -v error -i src/main/resources/assets/purpure/sounds/hollow_purple_video.ogg -f null - 2> /tmp/video_decode.err
+          cat /tmp/video_decode.err
+          test ! -s /tmp/video_decode.err
+
+          echo "Audio invocacion:"
+          sha256sum src/main/resources/assets/purpure/sounds/hollow_purple_invoke.ogg
+          test "$(sha256sum src/main/resources/assets/purpure/sounds/hollow_purple_invoke.ogg | cut -d' ' -f1)" = "4adeced1d7398a4cbb26fd7c29b14416f5388c90e633ad5a921c2aa7d1310e7e"
           ffprobe -v error -show_entries format=duration -of default=nw=1:nk=1 src/main/resources/assets/purpure/sounds/hollow_purple_invoke.ogg
           ffmpeg -v error -i src/main/resources/assets/purpure/sounds/hollow_purple_invoke.ogg -f null - 2> /tmp/invoke_decode.err
           cat /tmp/invoke_decode.err
@@ -86,6 +100,27 @@ jobs:
 
       - name: Build Forge mod
         run: gradle clean build --stacktrace
+
+      - name: Verify built JAR
+        run: |
+          JAR=build/libs/PURPURE-3D-Forge-1.20.1.jar
+          test -s "$JAR"
+
+          jar tf "$JAR" | grep -Fq 'assets/purpure/textures/entity/gojo_skin.png'
+          jar tf "$JAR" | grep -Fq 'assets/purpure/sounds/hollow_purple_video.ogg'
+          jar tf "$JAR" | grep -Fq 'assets/purpure/sounds/hollow_purple_invoke.ogg'
+          jar tf "$JAR" | grep -Fq 'igy/purpure/client/ClientGojoAttack.class'
+          jar tf "$JAR" | grep -Fq 'igy/purpure/client/ClientGojoSkinCaster.class'
+          jar tf "$JAR" | grep -Fq 'igy/purpure/server/PurpureServerEvents.class'
+
+          # El renderer de lineas viejo no debe volver a colarse.
+          if jar tf "$JAR" | grep -Fq 'ClientAnimePolish.class'; then
+            echo 'ERROR: ClientAnimePolish viejo fue empaquetado'
+            exit 1
+          fi
+
+          echo 'Contenido PURPURE clave:'
+          jar tf "$JAR" | grep -E 'ClientGojoAttack|ClientGojoSkinCaster|PurpureServerEvents|gojo_skin|hollow_purple'
 
       - name: Upload JAR
         uses: actions/upload-artifact@v4

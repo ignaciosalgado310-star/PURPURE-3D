@@ -51,10 +51,10 @@ public final class PurpureServerEvents {
                         .requires(source -> source.hasPermission(2))
                         .then(Commands.argument("target", EntityArgument.player())
                                 .executes(context -> start(EntityArgument.getPlayer(context, "target"), 25))
-                                .then(Commands.argument("hits", IntegerArgumentType.integer(1))
+                                .then(Commands.argument("totems", IntegerArgumentType.integer(1))
                                         .executes(context -> start(
                                                 EntityArgument.getPlayer(context, "target"),
-                                                IntegerArgumentType.getInteger(context, "hits")
+                                                IntegerArgumentType.getInteger(context, "totems")
                                         ))))
         );
     }
