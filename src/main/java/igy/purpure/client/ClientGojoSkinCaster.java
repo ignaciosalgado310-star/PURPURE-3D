@@ -21,15 +21,23 @@ import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 
 /**
- * V15: conserva el Gojo visual de PURPURE-3D, pero lo hace protagonista:
- * 1.68x, ojos Six Eyes reforzados en la skin, full-bright y anclado al punto
- * original del ritual aunque el objetivo empiece a viajar con Hollow Purple.
+ * Gojo del visor final aprobado V14.
+ *
+ * Conserva la skin empaquetada del visor y usa exactamente la misma línea de
+ * tiempo normalizada (11.8 s / 236 ticks) para levantar primero el brazo de
+ * Blue, después el de Red, juntar ambos durante la fusión y acompañar Purple.
+ *
+ * Gojo permanece visible hasta que el servidor envía STOP, es decir, no se
+ * limpia mientras queden tótems/daño/final por ejecutar.
  */
 @Mod.EventBusSubscriber(modid = PurpureMod.MODID, value = Dist.CLIENT, bus = Mod.EventBusSubscriber.Bus.FORGE)
 public final class ClientGojoSkinCaster {
     private static final ResourceLocation GOJO_SKIN =
             new ResourceLocation(PurpureMod.MODID, "textures/entity/gojo_skin.png");
+
+    // Se conserva el tamaño visual ya establecido por el proyecto.
     private static final float GOJO_SCALE = 1.68f;
+    private static final float TIMELINE_TICKS = 236.0f;
 
     private static PlayerModel<AbstractClientPlayer> model;
 
@@ -57,9 +65,13 @@ public final class ClientGojoSkinCaster {
         }
     }
 
-    private static void renderGojo(Minecraft mc, PoseStack pose, Camera camera,
-                                   AbstractClientPlayer target, float t) {
-        float alpha = smooth(0.0f, 12.0f, t) * (1.0f - smooth(216.0f, 238.0f, t));
+    private static void renderGojo(Minecraft mc,
+                                   PoseStack pose,
+                                   Camera camera,
+                                   AbstractClientPlayer target,
+                                   float t) {
+        // Fade-in del visor. Sin fade-out: STOP del servidor decide la limpieza.
+        float alpha = smooth(0.0f, 12.0f, t);
         if (alpha <= 0.01f) return;
 
         double ox = ClientPurpureEffects.effectX(target.getUUID());
@@ -68,7 +80,7 @@ public final class ClientGojoSkinCaster {
         if (Double.isNaN(ox) || Double.isNaN(oy) || Double.isNaN(oz)) return;
 
         resetModel();
-        animateModel(t);
+        animateApprovedV14(t);
 
         double gx = ox + 4.0;
         double gy = oy + 0.03;
@@ -81,7 +93,7 @@ public final class ClientGojoSkinCaster {
                 gz - camera.getPosition().z
         );
 
-        // Mira desde +X hacia el punto donde comenzó el ritual.
+        // Gojo mira desde +X hacia el objetivo/origen del ritual.
         pose.mulPose(Axis.YP.rotationDegrees(90.0f));
         pose.scale(-GOJO_SCALE, -GOJO_SCALE, GOJO_SCALE);
         pose.translate(0.0f, -1.501f, 0.0f);
@@ -89,6 +101,7 @@ public final class ClientGojoSkinCaster {
         MultiBufferSource.BufferSource buffers = mc.renderBuffers().bufferSource();
         RenderType type = RenderType.entityTranslucent(GOJO_SKIN);
         VertexConsumer consumer = buffers.getBuffer(type);
+
         model.renderToBuffer(
                 pose,
                 consumer,
@@ -96,6 +109,7 @@ public final class ClientGojoSkinCaster {
                 OverlayTexture.NO_OVERLAY,
                 1.0f, 1.0f, 1.0f, alpha
         );
+
         buffers.endBatch(type);
         pose.popPose();
     }
@@ -104,18 +118,23 @@ public final class ClientGojoSkinCaster {
         model.head.xRot = 0.0f;
         model.head.yRot = 0.0f;
         model.head.zRot = 0.0f;
+
         model.body.xRot = 0.0f;
         model.body.yRot = 0.0f;
         model.body.zRot = 0.0f;
+
         model.rightArm.xRot = 0.0f;
         model.rightArm.yRot = 0.0f;
         model.rightArm.zRot = 0.0f;
+
         model.leftArm.xRot = 0.0f;
         model.leftArm.yRot = 0.0f;
         model.leftArm.zRot = 0.0f;
+
         model.rightLeg.xRot = 0.0f;
         model.rightLeg.yRot = 0.0f;
         model.rightLeg.zRot = 0.0f;
+
         model.leftLeg.xRot = 0.0f;
         model.leftLeg.yRot = 0.0f;
         model.leftLeg.zRot = 0.0f;
@@ -128,61 +147,51 @@ public final class ClientGojoSkinCaster {
         model.rightPants.visible = true;
     }
 
-    private static void animateModel(float t) {
-        float breathe = Mth.sin(t * 0.105f) * 0.035f;
-        float sway = Mth.sin(t * 0.050f) * 0.035f;
+    private static void animateApprovedV14(float t) {
+        float p = Mth.clamp(t / TIMELINE_TICKS, 0.0f, 1.0f);
 
-        model.body.yRot = sway;
-        model.head.yRot = -sway * 0.72f;
-        model.head.xRot = -0.055f + Mth.sin(t * 0.047f) * 0.022f;
-        model.rightLeg.xRot = 0.035f + Mth.sin(t * 0.043f) * 0.018f;
-        model.leftLeg.xRot = -0.030f - Mth.sin(t * 0.043f) * 0.016f;
+        float leftRaise = smooth01(0.08f, 0.19f, p)
+                * (1.0f - smooth01(0.42f, 0.52f, p));
+        float rightRaise = smooth01(0.28f, 0.39f, p)
+                * (1.0f - smooth01(0.46f, 0.56f, p));
+        float bothGather = smooth01(0.45f, 0.68f, p);
+        float release = smooth01(0.77f, 0.87f, p);
 
-        float rx, ry, rz;
-        float lx, ly, lz;
+        // Blue: brazo izquierdo se levanta desde el hombro y la palma apunta a la energía.
+        model.leftArm.xRot = Mth.lerp(leftRaise, 0.0f, -Mth.PI / 2.05f);
+        model.leftArm.yRot = Mth.lerp(leftRaise, 0.0f, -1.18f);
+        model.leftArm.zRot = Mth.lerp(leftRaise, 0.0f, 0.08f);
 
-        if (t < 82.0f) {
-            float q = smooth(8.0f, 76.0f, t);
-            rx = lerp(q, 0.08f, -0.86f);
-            ry = lerp(q, 0.0f, -0.52f);
-            rz = lerp(q, 0.05f, -0.44f);
-            lx = lerp(q, -0.03f, -0.84f);
-            ly = lerp(q, 0.0f, 0.52f);
-            lz = lerp(q, -0.05f, 0.44f);
-        } else if (t < 150.0f) {
-            float q = smooth(82.0f, 140.0f, t);
-            rx = lerp(q, -0.86f, -1.26f);
-            ry = lerp(q, -0.52f, -0.72f);
-            rz = lerp(q, -0.44f, -0.26f);
-            lx = lerp(q, -0.84f, -1.26f);
-            ly = lerp(q, 0.52f, 0.72f);
-            lz = lerp(q, 0.44f, 0.26f);
-        } else if (t < 194.0f) {
-            float q = smooth(150.0f, 188.0f, t);
-            rx = lerp(q, -1.26f, -1.68f);
-            ry = lerp(q, -0.72f, -0.10f);
-            rz = lerp(q, -0.26f, -0.05f);
-            lx = lerp(q, -1.26f, -1.68f);
-            ly = lerp(q, 0.72f, 0.10f);
-            lz = lerp(q, 0.26f, 0.05f);
-        } else {
-            float q = smooth(194.0f, 220.0f, t);
-            rx = lerp(q, -1.68f, -1.50f);
-            ry = lerp(q, -0.10f, 0.0f);
-            rz = lerp(q, -0.05f, 0.0f);
-            lx = lerp(q, -1.68f, -0.40f);
-            ly = lerp(q, 0.10f, 0.18f);
-            lz = lerp(q, 0.05f, 0.18f);
-            model.body.xRot = -0.04f * q;
-            model.head.xRot -= 0.03f * q;
+        // Red: mismo gesto en el brazo derecho unos segundos después.
+        model.rightArm.xRot = Mth.lerp(rightRaise, 0.0f, -Mth.PI / 2.05f);
+        model.rightArm.yRot = Mth.lerp(rightRaise, 0.0f, 1.18f);
+        model.rightArm.zRot = Mth.lerp(rightRaise, 0.0f, -0.08f);
+
+        // Durante la fusión ambos brazos se cierran hacia la masa Blue + Red.
+        if (bothGather > 0.0f) {
+            model.leftArm.xRot = Mth.lerp(bothGather, -Mth.PI / 2.05f, -1.08f);
+            model.leftArm.yRot = Mth.lerp(bothGather, -1.18f, -0.39f);
+            model.leftArm.zRot = Mth.lerp(bothGather, 0.08f, -0.17f);
+
+            model.rightArm.xRot = Mth.lerp(bothGather, -Mth.PI / 2.05f, -1.08f);
+            model.rightArm.yRot = Mth.lerp(bothGather, 1.18f, 0.39f);
+            model.rightArm.zRot = Mth.lerp(bothGather, -0.08f, 0.17f);
+
+            model.head.yRot = -0.07f * bothGather;
         }
 
-        model.rightArm.xRot = rx + breathe;
-        model.rightArm.yRot = ry;
-        model.rightArm.zRot = rz;
-        model.leftArm.xRot = lx - breathe;
-        model.leftArm.yRot = ly;
-        model.leftArm.zRot = lz;
+        // Gesto final aprobado antes/durante la salida de Purple.
+        if (release > 0.0f) {
+            model.leftArm.xRot = Mth.lerp(release, -1.08f, -0.68f);
+            model.leftArm.yRot = Mth.lerp(release, -0.39f, -0.28f);
+            model.leftArm.zRot = Mth.lerp(release, -0.17f, 0.14f);
+
+            model.rightArm.xRot = Mth.lerp(release, -1.08f, -1.50f);
+            model.rightArm.yRot = Mth.lerp(release, 0.39f, 0.14f);
+            model.rightArm.zRot = Mth.lerp(release, 0.17f, -0.08f);
+
+            model.head.yRot = -0.10f * release;
+        }
 
         model.hat.copyFrom(model.head);
         model.rightSleeve.copyFrom(model.rightArm);
@@ -197,7 +206,8 @@ public final class ClientGojoSkinCaster {
         return x * x * (3.0f - 2.0f * x);
     }
 
-    private static float lerp(float q, float a, float b) {
-        return a + (b - a) * q;
+    private static float smooth01(float start, float end, float value) {
+        float x = Mth.clamp((value - start) / (end - start), 0.0f, 1.0f);
+        return x * x * (3.0f - 2.0f * x);
     }
 }
