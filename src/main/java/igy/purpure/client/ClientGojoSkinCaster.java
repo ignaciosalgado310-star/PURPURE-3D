@@ -183,20 +183,23 @@ public final class ClientGojoSkinCaster {
             rZ = Mth.lerp(release, 0.17f, -0.08f);
         }
 
+        // BLUE is on local -X: the textured right arm must use the BLUE/first pose.
+        // RED is on local +X: the textured left arm must use the RED/second pose.
+        // Geometry, skin and animation curves stay unchanged; only the arm/color pairing is corrected.
         pose.pushPose();
         pose.translate(-1.31f, 1.20f, 0.0f);
-        pose.mulPose(Axis.ZP.rotation(rZ));
-        pose.mulPose(Axis.YP.rotation(rY));
-        pose.mulPose(Axis.XP.rotation(rX));
+        pose.mulPose(Axis.ZP.rotation(lZ));
+        pose.mulPose(Axis.YP.rotation(lY));
+        pose.mulPose(Axis.XP.rotation(lX));
         drawSkinBoxAt(pose, skin, 0.66f, 2.32f, 0.80f, 0.0f, -1.16f, 0.0f, RARM, alpha);
         drawSkinBoxAt(pose, skin, 0.725f, 2.385f, 0.865f, 0.0f, -1.16f, 0.0f, RARM2, alpha);
         pose.popPose();
 
         pose.pushPose();
         pose.translate(1.31f, 1.20f, 0.0f);
-        pose.mulPose(Axis.ZP.rotation(lZ));
-        pose.mulPose(Axis.YP.rotation(lY));
-        pose.mulPose(Axis.XP.rotation(lX));
+        pose.mulPose(Axis.ZP.rotation(rZ));
+        pose.mulPose(Axis.YP.rotation(rY));
+        pose.mulPose(Axis.XP.rotation(rX));
         drawSkinBoxAt(pose, skin, 0.66f, 2.32f, 0.80f, 0.0f, -1.16f, 0.0f, LARM, alpha);
         drawSkinBoxAt(pose, skin, 0.725f, 2.385f, 0.865f, 0.0f, -1.16f, 0.0f, LARM2, alpha);
         pose.popPose();
