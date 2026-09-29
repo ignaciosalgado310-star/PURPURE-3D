@@ -53,7 +53,13 @@ jobs:
           base64 -d /tmp/hollow_purple_invoke.b64 > src/main/resources/assets/purpure/sounds/hollow_purple_invoke.ogg
 
           # Skin exacta tomada del GOJO-3D funcional (evita el modelo negro).
-          base64 -d src/main/resources/assets/purpure/textures/entity/gojo_skin.b64 > src/main/resources/assets/purpure/textures/entity/gojo_skin.png
+          cat \
+            src/main/resources/assets/purpure/textures/entity/gojo_skin.00.b64 \
+            src/main/resources/assets/purpure/textures/entity/gojo_skin.01.b64 \
+            src/main/resources/assets/purpure/textures/entity/gojo_skin.02.b64 \
+            src/main/resources/assets/purpure/textures/entity/gojo_skin.03.b64 \
+            > /tmp/gojo_skin.b64
+          base64 -d /tmp/gojo_skin.b64 > src/main/resources/assets/purpure/textures/entity/gojo_skin.png
           base64 -d src/main/resources/assets/purpure/textures/entity/white.b64 > src/main/resources/assets/purpure/textures/entity/white.png
 
           # ArmorStand solo como ancla/logica; Gojo visual lo dibuja el cliente.
@@ -76,6 +82,7 @@ jobs:
           rm -f src/main/resources/assets/purpure/sounds/hollow_purple_video.fixed.*.b64
           rm -f src/main/resources/assets/purpure/sounds/hollow_purple_invoke.0*.b64
           rm -f src/main/resources/assets/purpure/textures/entity/gojo_skin.b64
+          rm -f src/main/resources/assets/purpure/textures/entity/gojo_skin.0*.b64
           rm -f src/main/resources/assets/purpure/textures/entity/white.b64
 
       - name: Verify approved assets and command
