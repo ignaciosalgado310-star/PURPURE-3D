@@ -21,7 +21,7 @@ import net.minecraftforge.fml.common.Mod;
 import org.joml.Matrix4f;
 
 /**
- * Port directo del visor final aprobado "GOJO Hollow Purple — Fusión limpia V14".
+ * Port directo del visor final aprobado "GOJO Hollow Purple — Fusión Giratoria V15".
  *
  * La escena del visor dura 11.8 s = 236 ticks. Se conservaron sus valores de
  * tamaño, color, posiciones y tiempos. Ejes del visor -> mundo:
@@ -88,34 +88,42 @@ public final class ClientGojoAttack {
 
         float blueAppear = smooth(0.07f, 0.20f, p);
         float redAppear = smooth(0.27f, 0.40f, p);
+
+        // V15: se acercan y luego orbitan uno alrededor del otro.
+        // La órbita se cierra de forma progresiva mientras ambos pasan
+        // poco a poco de su color original al morado.
         float approach = smooth(0.44f, 0.56f, p);
-        float intertwine = smooth(0.53f, 0.70f, p);
-        float fuse = smooth(0.59f, 0.77f, p);
-        float colorMix = smooth(0.62f, 0.82f, p);
-        float purpleStable = smooth(0.78f, 0.87f, p);
+        float orbit = smooth(0.54f, 0.76f, p);
+        float close = smooth(0.61f, 0.79f, p);
+        float fuse = smooth(0.58f, 0.79f, p);
+        float colorMix = smooth(0.60f, 0.82f, p);
+        float purpleStable = smooth(0.79f, 0.87f, p);
         float launch = smooth(0.87f, 0.985f, p);
-        float cleanOut = smooth(0.79f, 0.88f, p);
+        float cleanOut = smooth(0.82f, 0.89f, p);
 
-        float baseSep = Mth.lerp(approach, 3.55f, 1.24f);
-        float turns = intertwine * Mth.PI * 6.2f;
-        float orbitR = Mth.lerp(fuse, 0.82f, 0.12f) * intertwine;
-        float centerSep = Mth.lerp(fuse, baseSep, 0.06f);
-        float wobble = 0.12f * Mth.sin(turns * 0.7f) * (1.0f - fuse * 0.65f);
+        float startSep = Mth.lerp(approach, 3.55f, 1.32f);
+        float orbitR = Mth.lerp(close, 1.04f, 0.075f) * orbit;
+        float centerSep = Mth.lerp(close, startSep, 0.04f);
+        float turns = orbit * Mth.PI * 7.0f;
 
-        float viewerBx = -centerSep + Mth.cos(turns) * orbitR;
-        float viewerRx = centerSep + Mth.cos(turns + Mth.PI) * orbitR;
-        float viewerBy = 2.72f + Mth.sin(turns) * orbitR * 0.66f + wobble;
-        float viewerRy = 2.72f + Mth.sin(turns + Mth.PI) * orbitR * 0.66f - wobble;
-        float viewerBz = 1.62f + Mth.sin(turns * 0.75f) * orbitR * 0.48f;
-        float viewerRz = 1.62f + Mth.sin((turns + Mth.PI) * 0.75f) * orbitR * 0.48f;
+        float orbitX = Mth.cos(turns) * orbitR;
+        float orbitY = Mth.sin(turns) * orbitR * 0.72f;
+        float orbitZ = Mth.sin(turns * 0.82f) * orbitR * 0.52f;
 
-        float sideFade = smooth(0.70f, 0.82f, p);
-        float blueSize = 1.16f * blueAppear * (1.0f - sideFade * 0.96f);
-        float redSize = 1.16f * redAppear * (1.0f - sideFade * 0.96f);
-        float stretch = 1.0f + 0.46f * fuse * (1.0f - colorMix * 0.60f);
-        float squeeze = 1.0f - 0.20f * fuse;
+        float viewerBx = -centerSep + orbitX;
+        float viewerRx = centerSep - orbitX;
+        float viewerBy = 2.72f + orbitY;
+        float viewerRy = 2.72f - orbitY;
+        float viewerBz = 1.62f + orbitZ;
+        float viewerRz = 1.62f - orbitZ;
 
-        float tint = colorMix * 0.82f;
+        float sideFade = smooth(0.73f, 0.84f, p);
+        float blueSize = 1.16f * blueAppear * (1.0f - sideFade * 0.97f);
+        float redSize = 1.16f * redAppear * (1.0f - sideFade * 0.97f);
+        float stretch = 1.0f + 0.42f * fuse * (1.0f - close * 0.65f);
+        float squeeze = 1.0f - 0.17f * fuse;
+
+        float tint = colorMix * 0.88f;
         float purpleR = 0x8e / 255.0f;
         float purpleG = 0x2f / 255.0f;
         float purpleB = 1.0f;
@@ -146,7 +154,7 @@ public final class ClientGojoAttack {
         drawOrb(pose, blue, t, 1.6f, true, stretch, squeeze, 1.0f + 0.10f * fuse);
         drawOrb(pose, red, t + 6.0f, 4.8f, false, stretch, squeeze, 1.0f + 0.10f * fuse);
 
-        float fusionBirth = smooth(0.57f, 0.73f, p);
+        float fusionBirth = smooth(0.61f, 0.78f, p);
         float fusionLife = 1.0f - cleanOut;
         if (fusionBirth > 0.01f && fusionLife > 0.01f) {
             float fusionScale = Mth.lerp(fusionBirth, 0.001f, 1.62f)
@@ -155,7 +163,7 @@ public final class ClientGojoAttack {
             drawFusionMass(pose, t, fusionScale, colorMix, fusionBirth, fusionLife);
         }
 
-        boolean fusionParticles = p > 0.57f && p < 0.84f && fusionLife > 0.05f;
+        boolean fusionParticles = p > 0.61f && p < 0.84f && fusionLife > 0.05f;
         if (fusionParticles) {
             drawFusionFlow(pose, t, fuse, colorMix, fusionLife);
         }
