@@ -1,0 +1,22 @@
+{
+  "kame_intro": {
+    "sounds": [
+      { "name": "gokufx:kame_intro", "stream": true }
+    ]
+  },
+  "kame_sustain": {
+    "sounds": [
+      { "name": "gokufx:kame_sustain", "stream": true }
+    ]
+  },
+  "kame_outro": {
+    "sounds": [
+      { "name": "gokufx:kame_outro", "stream": true }
+    ]
+  },
+  "genki_charge": {
+    "sounds": [
+      { "name": "gokufx:genki_charge", "stream": true }
+    ]
+  }
+}
