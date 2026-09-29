@@ -21,7 +21,7 @@ import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 
 /**
- * Gojo del visor final aprobado V14.
+ * Gojo del visor final aprobado V15.
  *
  * Conserva la skin empaquetada del visor y usa exactamente la misma línea de
  * tiempo normalizada (11.8 s / 236 ticks) para levantar primero el brazo de
@@ -80,7 +80,7 @@ public final class ClientGojoSkinCaster {
         if (Double.isNaN(ox) || Double.isNaN(oy) || Double.isNaN(oz)) return;
 
         resetModel();
-        animateApprovedV14(t);
+        animateApprovedV15(t);
 
         double gx = ox + 4.0;
         double gy = oy + 0.03;
@@ -147,7 +147,7 @@ public final class ClientGojoSkinCaster {
         model.rightPants.visible = true;
     }
 
-    private static void animateApprovedV14(float t) {
+    private static void animateApprovedV15(float t) {
         float p = Mth.clamp(t / TIMELINE_TICKS, 0.0f, 1.0f);
 
         float leftRaise = smooth01(0.08f, 0.19f, p)
