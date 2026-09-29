@@ -1,0 +1,27 @@
+modLoader="javafml"
+loaderVersion="[47,)"
+license="All Rights Reserved"
+
+[[mods]]
+modId="gokufx"
+version="1.0.6"
+displayName="GOKU FX - Kamehameha + Genki Dama"
+authors="IGY_gaming"
+description='''
+Ataques cinematograficos 3D para Minecraft Java 1.20.1.
+Incluye Kamehameha y Genki Dama activables por comandos compatibles con Stream To Earn.
+'''
+
+[[dependencies.gokufx]]
+modId="forge"
+mandatory=true
+versionRange="[47.3.5,)"
+ordering="NONE"
+side="BOTH"
+
+[[dependencies.gokufx]]
+modId="minecraft"
+mandatory=true
+versionRange="[1.20.1,1.20.2)"
+ordering="NONE"
+side="BOTH"
