@@ -180,11 +180,13 @@ public final class ClientGojoAttack {
 
             if (t <= TIMELINE_TICKS) {
                 px = GOJO_X - viewerPz;
-                py = 2.72f;
+                // Same Purple, same size and effects. Only lower it as it launches
+                // so the sphere centers over the player/Gojo instead of passing above.
+                py = Mth.lerp(launch, 2.72f, 1.92f);
                 pz = 0.0f;
             } else {
                 px = (float)(target.getX() - ox) + POST_TIMELINE_PURPLE_X;
-                py = (float)(target.getY() - oy) + 2.72f;
+                py = (float)(target.getY() - oy) + 1.92f;
                 pz = (float)(target.getZ() - oz);
             }
 
