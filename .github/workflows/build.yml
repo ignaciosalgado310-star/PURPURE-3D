@@ -54,6 +54,7 @@ jobs:
 
           # Skin exacta tomada del GOJO-3D funcional (evita el modelo negro).
           base64 -d src/main/resources/assets/purpure/textures/entity/gojo_skin.b64 > src/main/resources/assets/purpure/textures/entity/gojo_skin.png
+          base64 -d src/main/resources/assets/purpure/textures/entity/white.b64 > src/main/resources/assets/purpure/textures/entity/white.png
 
           # ArmorStand solo como ancla/logica; Gojo visual lo dibuja el cliente.
           sed -i 's/gojo.setInvisible(false);/gojo.setInvisible(true);/' src/main/java/igy/purpure/server/PurpureServerEvents.java
@@ -75,15 +76,18 @@ jobs:
           rm -f src/main/resources/assets/purpure/sounds/hollow_purple_video.fixed.*.b64
           rm -f src/main/resources/assets/purpure/sounds/hollow_purple_invoke.0*.b64
           rm -f src/main/resources/assets/purpure/textures/entity/gojo_skin.b64
+          rm -f src/main/resources/assets/purpure/textures/entity/white.b64
 
       - name: Verify approved assets and command
         run: |
           test -s src/main/resources/assets/purpure/sounds/hollow_purple_video.ogg
           test -s src/main/resources/assets/purpure/sounds/hollow_purple_invoke.ogg
           test -s src/main/resources/assets/purpure/textures/entity/gojo_skin.png
+          test -s src/main/resources/assets/purpure/textures/entity/white.png
 
-          # La skin es el mismo PNG empaquetado por GOJO-3D.
-          test "$(stat -c%s src/main/resources/assets/purpure/textures/entity/gojo_skin.png)" = "5113"
+          # Skin exacta subida por el usuario en el chat.
+          test "$(sha256sum src/main/resources/assets/purpure/textures/entity/gojo_skin.png | cut -d' ' -f1)" = "604ca0b0d54c65b87bc1b245175f34a63a5df9446679526318141dd0cf4e468f"
+          test "$(stat -c%s src/main/resources/assets/purpure/textures/entity/gojo_skin.png)" = "5115"
 
           # El comando sigue sin limite artificial de 300; acepta 9999 y mas.
           grep -Fq 'Commands.literal("purpure")' src/main/java/igy/purpure/server/PurpureServerEvents.java
@@ -133,6 +137,7 @@ jobs:
           test -s "$JAR"
 
           jar tf "$JAR" | grep -Fq 'assets/purpure/textures/entity/gojo_skin.png'
+          jar tf "$JAR" | grep -Fq 'assets/purpure/textures/entity/white.png'
           jar tf "$JAR" | grep -Fq 'assets/purpure/sounds/hollow_purple_video.ogg'
           jar tf "$JAR" | grep -Fq 'assets/purpure/sounds/hollow_purple_invoke.ogg'
           jar tf "$JAR" | grep -Fq 'igy/purpure/client/ClientGojoAttack.class'
