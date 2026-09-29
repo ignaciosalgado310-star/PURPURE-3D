@@ -1,0 +1,178 @@
+plugins {
+    id 'eclipse'
+    id 'idea'
+    id 'maven-publish'
+    id 'net.minecraftforge.gradle' version '[6.0,6.2)'
+}
+
+group = 'com.igygaming.gokufx'
+version = '1.0.7'
+
+base {
+    archivesName = 'GOKU-FX-1.20.1'
+}
+
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(17)
+}
+
+minecraft {
+    mappings channel: 'official', version: '1.20.1'
+    accessTransformer = file('src/main/resources/META-INF/accesstransformer.cfg')
+    copyIdeResources = true
+
+    runs {
+        client {
+            workingDirectory project.file('run')
+            property 'forge.logging.markers', 'REGISTRIES'
+            property 'forge.logging.console.level', 'debug'
+            mods { gokufx { source sourceSets.main } }
+        }
+        server {
+            workingDirectory project.file('run-server')
+            property 'forge.logging.markers', 'REGISTRIES'
+            property 'forge.logging.console.level', 'debug'
+            mods { gokufx { source sourceSets.main } }
+        }
+    }
+}
+
+repositories { mavenCentral() }
+
+dependencies {
+    minecraft 'net.minecraftforge:forge:1.20.1-47.3.5'
+}
+
+jar {
+    manifest {
+        attributes([
+                'Specification-Title'     : 'GOKU FX',
+                'Specification-Vendor'    : 'IGY_gaming',
+                'Specification-Version'   : '1',
+                'Implementation-Title'    : project.name,
+                'Implementation-Version'  : project.jar.archiveVersion,
+                'Implementation-Vendor'   : 'IGY_gaming'
+        ])
+    }
+    finalizedBy 'reobfJar'
+}
+
+// Valida las dos skins antes de empaquetar para impedir que un PNG corrupto
+// vuelva a entrar al JAR silenciosamente.
+tasks.register('verifyGokuSkins') {
+    def skinFiles = [
+            file('src/main/resources/assets/gokufx/textures/entity/genki_goku.png'),
+            file('src/main/resources/assets/gokufx/textures/entity/goku_ssb.png')
+    ]
+    inputs.files(skinFiles)
+
+    doLast {
+        skinFiles.each { skin ->
+            if (!skin.exists()) {
+                throw new GradleException("Skin faltante: ${skin}")
+            }
+            def image = javax.imageio.ImageIO.read(skin)
+            if (image == null) {
+                throw new GradleException("Skin PNG corrupta/no legible: ${skin.name}")
+            }
+            if (image.width != 64 || image.height != 64) {
+                throw new GradleException("Skin ${skin.name} debe ser 64x64 y es ${image.width}x${image.height}")
+            }
+            logger.lifecycle("GOKU FX: skin validada ${skin.name} (64x64)")
+        }
+    }
+}
+
+// Reconstruye los assets 3D ya existentes en el repositorio.
+def generatedAssetsZip = layout.buildDirectory.file('generated/gokufx-assets.zip')
+
+tasks.register('prepareGokuAssets') {
+    inputs.files(fileTree('asset-pack/parts') { include '*.b64' })
+    outputs.file(generatedAssetsZip)
+
+    doLast {
+        def parts = fileTree('asset-pack/parts') { include '*.b64' }.files.sort { a, b -> a.name <=> b.name }
+        if (parts.isEmpty()) {
+            throw new GradleException('No se encontraron las partes Base64 de los assets 3D.')
+        }
+
+        def encoded = parts.collect { it.getText('UTF-8').trim() }.join('')
+        byte[] decoded = java.util.Base64.getDecoder().decode(encoded)
+        if (decoded.length < 4 || decoded[0] != (byte) 0x50 || decoded[1] != (byte) 0x4B) {
+            throw new GradleException('Los assets 3D reconstruidos no forman un ZIP válido.')
+        }
+
+        def out = generatedAssetsZip.get().asFile
+        out.parentFile.mkdirs()
+        out.bytes = decoded
+        logger.lifecycle("GOKU FX: assets 3D reconstruidos (${decoded.length} bytes)")
+    }
+}
+
+// Genkidama V13 está integrada directamente en el código fuente.
+// El parche legacy queda como tarea no-op para conservar la estructura del build.
+tasks.register('patchGenkiVisuals') {
+    outputs.upToDateWhen { false }
+    doLast {
+        logger.lifecycle('GOKU FX: Genkidama V13 ya integrada; no se aplican parches legacy.')
+    }
+}
+
+// Reconstruye SOLO el audio completo de Genkidama desde sus partes Base64.
+// No modifica ni reconstruye el audio/código de Kamehameha.
+def generatedGenkiAudio = layout.buildDirectory.file('generated/genki_charge.ogg')
+
+tasks.register('prepareGenkiAudio') {
+    inputs.files(fileTree('audio-pack/genki') { include '*.b64' })
+    outputs.file(generatedGenkiAudio)
+
+    doLast {
+        def parts = fileTree('audio-pack/genki') { include '*.b64' }.files.sort { a, b -> a.name <=> b.name }
+        if (parts.isEmpty()) {
+            throw new GradleException('No se encontraron partes de audio para Genkidama.')
+        }
+
+        def encoded = parts.collect { it.getText('UTF-8').trim() }.join('')
+        byte[] decoded = java.util.Base64.getDecoder().decode(encoded)
+        if (decoded.length < 4 || decoded[0] != (byte) 0x4F || decoded[1] != (byte) 0x67 ||
+                decoded[2] != (byte) 0x67 || decoded[3] != (byte) 0x53) {
+            throw new GradleException('El audio reconstruido de Genkidama no es OGG válido.')
+        }
+
+        def out = generatedGenkiAudio.get().asFile
+        out.parentFile.mkdirs()
+        out.bytes = decoded
+        logger.lifecycle("GOKU FX: audio completo de Genkidama restaurado (" + decoded.length + " bytes)")
+    }
+}
+
+tasks.named('processResources').configure {
+    dependsOn 'verifyGokuSkins', 'prepareGokuAssets', 'prepareGenkiAudio'
+    from({ zipTree(generatedAssetsZip.get().asFile) })
+
+    doLast {
+        copy {
+            from generatedGenkiAudio
+            into layout.buildDirectory.dir('resources/main/assets/gokufx/sounds').get().asFile
+            rename { 'genki_charge.ogg' }
+        }
+
+        // Las skins aprobadas tienen prioridad sobre cualquier copia incluida en el ZIP legacy.
+        copy {
+            from 'src/main/resources/assets/gokufx/textures/entity/genki_goku.png'
+            into layout.buildDirectory.dir('resources/main/assets/gokufx/textures/entity').get().asFile
+        }
+        copy {
+            from 'src/main/resources/assets/gokufx/textures/entity/goku_ssb.png'
+            into layout.buildDirectory.dir('resources/main/assets/gokufx/textures/entity').get().asFile
+        }
+    }
+}
+
+tasks.named('compileJava').configure {
+    dependsOn 'patchGenkiVisuals'
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
