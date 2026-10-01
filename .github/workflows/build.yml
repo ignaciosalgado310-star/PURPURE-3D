@@ -31,14 +31,16 @@ jobs:
           # Audio nuevo del video enviado por el usuario. Se omiten 3.80 s iniciales
           # para alinear azul, rojo, fusion, disparo e impacto sin tocar la logica del mod.
           cat \
-            src/main/resources/assets/purpure/sounds/hollow_purple_video.user.00.b64 \
+            src/main/resources/assets/purpure/sounds/hollow_purple_video.user.00a.b64 \
+            src/main/resources/assets/purpure/sounds/hollow_purple_video.user.00b.b64 \
             src/main/resources/assets/purpure/sounds/hollow_purple_video.user.01.b64 \
             src/main/resources/assets/purpure/sounds/hollow_purple_video.user.02.b64 \
             src/main/resources/assets/purpure/sounds/hollow_purple_video.user.03.b64 \
             src/main/resources/assets/purpure/sounds/hollow_purple_video.user.04.b64 \
             src/main/resources/assets/purpure/sounds/hollow_purple_video.user.05.b64 \
             src/main/resources/assets/purpure/sounds/hollow_purple_video.user.06.b64 \
-            src/main/resources/assets/purpure/sounds/hollow_purple_video.user.07.b64 \
+            src/main/resources/assets/purpure/sounds/hollow_purple_video.user.07a.b64 \
+            src/main/resources/assets/purpure/sounds/hollow_purple_video.user.07b.b64 \
             > /tmp/hollow_purple_video.b64
           base64 -d /tmp/hollow_purple_video.b64 > src/main/resources/assets/purpure/sounds/hollow_purple_video.ogg
 
